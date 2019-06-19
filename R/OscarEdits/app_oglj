@@ -1,0 +1,2643 @@
+
+# To all embarking on this journey:
+# I highly recommend watching Joe Chen's seminar
+# on reactive Shiny programming
+# https://www.rstudio.com/resources/webinars/shiny-developer-conference/
+# In particular, setting:
+# options(shiny.reactlog = TRUE)
+# and pressing CTRL + F3 after running the app
+# will provide a visual means of exploring
+# connections between inputs, outputs,
+# observers, and reactive objects
+
+###################################
+# Shiny libraries
+library(shiny)
+library(shinydashboard)
+library(shinyjs)
+library(shinyTree) # generating an expandable/collapsed checkboxes (nested checkboxes)
+
+###################################
+# Connecting to Remote Database
+library(rsconnect)
+library(mongolite) # connecting to mongo lab, a web-based mongodb
+library(RCurl)
+
+###################################
+# Spatial + mapping packages
+library(leaflet)
+library(sp)
+# packages used for simplifying spatial lines dataframes
+library(spdplyr) # for manipulating the attribute data inside the spatial data frame
+library(rmapshaper) # for manipulating the geometry (polygon, line, marker) part of the GeoJSON data
+library(sf)
+
+library(RColorBrewer)
+
+library(htmltools) # for point popups
+library(httr)
+
+
+library(stringr)
+
+library(dplyr)
+library(ggvis)
+library(ggplot2)
+
+
+#### Notice there is a limit of 2,500 calls per day
+## calculating shortest distance between any pair of origin and destination through using Google API
+
+# We're only using the XML library for the distance call
+
+library(XML)
+
+# We can accomplish the same with jsonlite
+
+library(jsonlite)
+
+library(scales) # formatting percentage
+
+library(tidyverse)
+library(glue)
+
+########################################
+# processing spatial data
+
+# AADT
+
+# ct_aadt_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/ct_aadtRoadClass2017_ctdot_4326.geojson"
+#   ) %>% st_transform(
+#     ct_aadt_4326_sf,
+#     crs = 4326
+#   )
+# 
+# # Interstate AADT
+# 
+# ct_aadtInterstate_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   FC_FC_CODE == 1
+# )
+# 
+# #  Other Freeway AADT
+# 
+# ct_aadtOtherFreeway_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   FC_FC_CODE == 2
+# )
+# 
+# #  Major Arterial AADT
+# 
+# ct_aadtMajorArterial_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   FC_FC_CODE == 3
+# )
+# 
+# #  Minor Arterial AADT
+# 
+# ct_aadtMinorArterial_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   FC_FC_CODE == 4
+# )
+# 
+# #  Major Collector AADT
+# 
+# ct_aadtMajorCollector_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   FC_FC_CODE == 5
+# )
+# 
+# #  Minor Collector AADT
+# 
+# ct_aadtMinorCollector_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   FC_FC_CODE == 6
+# )
+# 
+# #  Local AADT
+# 
+# ct_aadtLocal_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   FC_FC_CODE == 7
+# )
+# 
+# # Unsorted AADT
+# 
+# ct_aadtNull_4326_sf <- subset(
+#   ct_aadt_4326_sf,
+#   is.null(FC_CODE_DE)
+# )
+# 
+# # Gas stations
+# 
+# ct_stationsGas_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/ct_stationsGas_4326.geojson"
+#   )
+# 
+# # H2 stations
+# 
+# ct_stationsH2_txt <- getURL(
+#   url = "https://developer.nrel.gov/api/alt-fuel-stations/v1.csv?fuel_type=HY&state=CT&access=public&api_key=HafPxe7WUkiiKAgWpBOWq8jgj5SvevcNGqw4WAgw&format=csv"
+# )
+# 
+# ct_stationsH2_4326_csv <- read_delim(
+#     file = ct_stationsH2_txt,
+#     delim = ","
+#   )
+# 
+# ct_stationsH2_sf <- st_as_sf(
+#     ct_stationsH2_4326_csv,
+#     coords = c("Longitude","Latitude")
+#   )
+# 
+# ct_stationsH2_4326_sf <- st_set_crs(
+#     x = ct_stationsH2_sf,
+#     value = 4326
+#   )
+# 
+# # Natural Gas Pipelines
+# 
+# us_natGasPipes_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/NaturalGas_Pipelines_US_201804.shp"
+# ) %>% st_transform(
+#   us_natGasPipes_4326_sf,
+#   crs = 4326
+# )
+# 
+# # CT Borders
+# 
+# us_stateBorders_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/2011_US_Historic_State_Territory_Boundaries.shp"
+# ) %>% st_transform(
+#   us_stateBorders_4326_sf,
+#   crs = 4326
+# )
+# 
+# ct_stateBorders_4326_sf <- subset(
+#   us_stateBorders_4326_sf,
+#   ABBR_NAME == "CT"
+# )
+# 
+# # Get intersection of pipelines with CT Borders
+# 
+# ct_natGasPipes_4326_sf <- st_intersection(
+#   us_natGasPipes_4326_sf,
+#   ct_stateBorders_4326_sf
+# )
+# 
+# # Make it one geometry for ease of rendering:
+# 
+# ct_natGasPipes_4326_sf <- st_union(
+#   ct_natGasPipes_4326_sf
+# )
+# 
+# # DFLRM Results
+# 
+# ct_05dflrm_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/Optimal_5_DFRLM_-_St_Pref.shp"
+# ) %>% st_transform(
+#     ct_05dflrm_4326_sf,
+#     crs = 4326
+#   )
+# 
+# ct_10dflrm_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/DFRLM_Opt_p10_F1_Max_Trips_NoFwyX_R100.shp"
+# ) %>% st_transform(
+#   ct_10dflrm_4326_sf,
+#   crs = 4326
+# )
+# 
+# ct_05ftback_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/ct_points5fuelTravelBack.geojson"
+# )
+# 
+# ct_10ftback_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/ct_points10fuelTravelBack.geojson"
+# )
+# 
+# ct_05pMed_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/ct_points5pMedian.geojson"
+# )
+# 
+# ct_10pMed_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/ct_points10pMedian.geojson"
+# )
+
+
+databaseName <- "geodesign_h2_ct_2018"
+
+options(
+  mongodb = list(
+    "host" = "ds139370.mlab.com:39370",
+    "username" = "user_h2_ct_2018",
+    "password" = "773BearDown"
+  )
+)
+
+mongoURL <- sprintf(
+  "mongodb://%s:%s@%s/%s",
+  options()$mongodb$username,
+  options()$mongodb$password,
+  options()$mongodb$host,
+  databaseName
+)
+
+xAxis_vars <- c(
+  "Group.Stage" = "GROUP_STAGE",
+  "Average AADT" = "AVG_AADT",
+  "Average Fleet Size" = "AVG_FLEET",
+  "Paths Covered" = "PATHS_COVERED"
+)
+
+yAxis_vars <- c(
+  "Average AADT" = "AVG_AADT",
+  "Average Fleet Size" = "AVG_FLEET",
+  "Paths Covered" = "PATHS_COVERED"
+)
+
+# marker options
+
+
+
+header <- dashboardHeader(
+  title = tags$div(
+    style = "font-size:0",
+    p(
+      span(
+        "COL", style = "color:white; font-size: 20px"
+      ),
+      span(
+        "LAB", style = "color:red; font-size: 20px"
+      ),
+      span(
+        "LOCATION: alt fuel stations", style = "color: white; font-size: 20px"
+      )
+    )
+  ),
+  titleWidth = 400
+)
+
+
+body <- dashboardBody(
+  
+  # call Javascript for use in Shiny
+  
+  useShinyjs(),
+  
+  # reload the page when calling function 'shinyjs.refresh'
+  
+  extendShinyjs(
+    text = "shinyjs.refresh = function() { location.reload(); }"
+  ),
+  
+  # make a fluid row in the body. This makes the platform scaleable across screenwidths
+  
+  fluidRow(
+    
+    # Access the HTML <head> element
+    
+    tags$head(
+      
+      # Create an HTML <style> element
+      
+      tags$style(
+        
+        # Write HTML code and set styles for elements that we'll construct later.
+        # This could be done in CSS as well.  Might be cleaner that way.
+        
+        HTML(
+          "
+          .form-group{
+          margin-top: 0px;
+          margin-bottom: 0px;
+          }
+          .selectize-control{
+          margin-top: 0px;
+          margin-bottom: 0px;
+          }
+          .checkbox{
+          margin-top: 0px;
+          margin-bottom: 0px;
+          }
+          "
+        )
+        )
+        ),
+    
+    # Create a tabset panel, or a set of tabs
+    # assign it an ID
+    # We'll populate it with our working tabs
+    
+    tabsetPanel(
+      id = "Geodesign",
+      type = "tabs",
+      
+      # This is the Main tab
+      # we'll put the Leaflet map in here.
+      
+      tabPanel(
+        title = strong("Main"),
+        id = "mainTab",
+        value = "mainTab",
+        
+        
+        # This is the section of the Main tab holding the Leaflet widget
+        
+        column(
+          width = 10,
+          leafletOutput(
+            "map",
+            height = 900
+          )
+        ),
+        
+        # This is the sidebar of the Main tab holding controls
+        
+        column(
+          width = 2,
+          height = 1200,
+          style = "
+          padding:0px 5px 0px 5px;
+          ",
+          wellPanel(
+              
+            # This div contains the inputs for labelling groups
+              
+            div(
+              style = "
+              padding:0px 0px 5px 0px;
+              ",
+              title = "
+              Start with workshop name if applicable, e.g. CT_H2_2019 Group A
+              ",
+              textInput(
+                "group",
+                label = "
+                Group Name (20 characters Max)
+                ",
+                value = "",
+                placeholder = "Enter your group name..."
+              )
+            ),
+              
+            # This div contains the numeric input for indicating stage
+            div(
+              
+              style = "
+              padding: 0px 0px 5px 0px;
+              ",
+              numericInput(
+                "stage",
+                label = "Stage",
+                value = NULL
+                
+              )
+              
+            ),
+              
+              # This div contains the numeric input for indicating iteration
+              
+            div(
+              style = "
+              padding: 0px 0px 5px 0px;
+              ",
+              numericInput(
+                "iteration",
+                label = "Iteration",
+                value = NULL
+              )
+            ),
+              style = "
+              padding: 0px 5px 0px 5px;
+              margin-bottom: 10px;
+              "
+          ),
+            
+            # This panel contains layer controls for the Leaflet Map
+            # Performance might be improved using the solution in https://stackoverflow.com/questions/42658225/put-leaflet-controls-outside-of-map-div-in-shiny-environment
+            
+            wellPanel(
+              checkboxInput(
+                inputId = "ct_stationsH2_button",
+                label = "All H2 Stations",
+                TRUE
+              ),
+              checkboxInput(
+                inputId = "ct_stationsGas_button",
+                label = "All Fuel Stations",
+                TRUE
+              ),
+              checkboxInput(
+                inputId = "ct_aadt_1_button",
+                label = "Interstate AADT",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_aadt_2_button",
+                label = "Other Freeway AADT",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_aadt_3_button",
+                label = "Major Arterial AADT",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_aadt_4_button",
+                label = "Minor Arterial AADT",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_aadt_5_button",
+                label = "Major Collector AADT",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_aadt_6_button",
+                label = "Minor Collector AADT",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_aadt_7_button",
+                label = "Local Road AADT",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_natGasPipes_button",
+                label = "Natural Gas Pipelines",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_05dflrm_button",
+                label = "5 DFLRM",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_10dflrm_button",
+                label = "10 DFLRM",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_05ftBack_button",
+                label = "5 Fuel-Travel-Back",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_10ftBack_button",
+                label = "10 Fuel-Travel-Back",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_05pMed_button",
+                label = "5 p-Median",
+                FALSE
+              ),
+              checkboxInput(
+                inputId = "ct_10pMed_button",
+                label = "10 p-Median",
+                FALSE
+              ),
+              
+              style = "
+              padding: 0px 5px 0px 5px;
+              margin-bottom: 10px;
+              "
+            ),
+            
+            # This panel contains the distance calculation tool
+            # Reminder that the distance calculation currently uses a pre-calculated matrix of distances between o-d pairs that requires the user to input origin & destination ID #s for the table look-up. 
+            
+            wellPanel(
+              bootstrapPage(
+                
+                # This div contains the title
+                div(
+                  p(
+                    style = "
+                    padding: 0px;
+                    margin-bottom: 5px;
+                    ",
+                    strong(
+                      "Distance Calculation"
+                    )
+                  )
+              ),
+              
+              # This div contains origin & destination ID# inputs
+              
+              div(
+                style = "
+                display: inline-block
+                ",
+                textInput(
+                  inputId = "from",
+                  label = NULL,
+                  value = "",
+                  width = 90,
+                  placeholder = "Enter ID"
+                )
+                ),
+              div(
+                style = "
+                display: inline-block
+                ",
+                "To"
+              ),
+              div(
+                style = "
+                display: inline-block;
+                padding: 0px 15px 0px 0px
+                ",
+                textInput(
+                  inputId = "to",
+                  label = NULL,
+                  value = "",
+                  width = 90,
+                  placeholder = "Enter ID"
+                )
+              )
+              ),
+              bootstrapPage(
+                
+                # This div contains the button that initiates distance calculation
+                
+                div(
+                  style = "
+                  display: inline-block;
+                  padding: 5px 5px 5px 0px;
+                  ",
+                  title = "
+                  Distance Calculation
+                  ",
+                  actionButton(
+                    "distCal",
+                    "Calculate"
+                  )
+                ),
+                
+                # This div contains the button that clears labels from previously measured points
+                
+                div(
+                  style = "
+                  display: inline-block;
+                  padding: 5px 0px 5px 0px;
+                  ",
+                  title = "
+                  Remove Labels
+                  ",
+                  actionButton(
+                    "removeLabels",
+                    "Remove Labels"
+                  )
+                )
+      ),
+      
+      # Distance look-up result display
+      
+      verbatimTextOutput(
+        outputId = "distanceResult"
+      ),
+      
+      style = "
+      padding: 0px 5px 0px 5px;
+      margin-bottom: 10px;
+      "
+        ),
+      
+      # Panel containing driving range input and layer control for displaying gaps in tonnage quartiles
+      # Since we're not using tonnage in the CT workshop, we could replace this with VMT
+      
+      wellPanel(
+          
+        # This div contains the title
+        
+        div(
+          p(
+            style = "
+            padding: 0px;
+            margin-bottom: 5px;
+            ",
+            strong(
+              "Driving Range"
+            )
+          )
+        ),
+        
+        # This div contains input for the driving range
+        # Why does it need to be text input? Why not number input?
+        # Maybe radio buttons to select ranges of existing vehicles, with an "other" option for inputing a different range
+        
+        div(
+          style = "
+          display: inline-block;
+          padding: 0px 0px 5px 0px;
+          ",
+          textInput(
+            "driving_range",
+            label = NULL,
+            value = "",
+            placeholder = "Enter driving range"
+          )
+          ),
+        
+        # div containing literally just the word "miles"
+        div(
+          style = "
+          display: inline-block;
+          padding: 0px 0px 5px 0px;
+          ",
+          "miles"
+        ),
+        
+        # div containing title for layer control section
+        
+        div(
+          p(
+            style = "
+            padding: 3px 0px 0px 0px;
+            margin-bottom: 0px
+            ",
+            strong(
+              "Show Coverage Gaps"
+            )
+          )
+          ),
+        
+        # layer controls
+        
+        checkboxInput(
+          inputId = "gaps_top_quartile",
+          label = "Top Quartile"
+        ),
+        checkboxInput(
+          inputId = "gaps_2nd_quartile",
+          label = "2nd Quartile"
+        ),
+        checkboxInput(
+          inputId = "gaps_3rd_quartile",
+          label = "3rd Quartile"
+        ),
+        checkboxInput(
+          inputId = "gaps_4th_quartile",
+          label = "4th Quartile"
+        ),
+        
+        
+        # # Input for specific O-D pair that displays path on map
+        # 
+        # div(
+        #   style = "
+        #     padding: 5px 0px 5px 0px
+        #   ",
+        #   selectInput(
+        #     inputId = "odPairs",
+        #     label = "Origin-Destination Pairs",
+        #     choices = c(
+        #       Choose = "",
+        #       OD_paths$PAIR
+        #     ),
+        #     selectize = FALSE
+        #   )
+        # ),
+        
+        style = "
+        padding: 0px 5px 0px 5px;
+        margin-bottom: 10px;
+        "
+      ),
+        
+        
+        
+      wellPanel(
+        uiOutput(
+          "previousGroupList"
+        ),
+        
+        # this div contains a layer control button for adding candidates from prior sessions to the map
+        tags$div(
+          style = "
+          padding: 0px 0px 5px 0px
+          ",
+          title = "
+          Display previously selected candidates
+          ",
+          actionButton(
+            inputId = "addPrevious",
+            label = "Add Previous Candidates"
+          )
+        ),
+        
+        # this div contains a layer control button for removing candidates from prior sessions to the map
+        tags$div(
+          style = "
+          padding: 0px 0px 5px 0px
+          ",
+          title = "
+          Hide previously selected candidates
+          ",
+          actionButton(
+            inputId = "hidePrevious",
+            label = "Hide Previous Candidates"
+          )
+        ),
+        
+        style = "
+        padding: 0px 5px 0px 5px;
+        margin-bottom: 10px;
+        "
+      ),
+        
+      wellPanel(
+        
+        # FW: adding a submit button "Evaluate" to get results and generate a table (inlcuding loading and saving data to a remote database)
+        
+        tags$div(
+          style = "
+          padding: 5px 0px 5px 0px;
+          ",
+          title = "
+          Performance evaluation for selected truck stops
+          ",
+          actionButton(
+            inputId = "eval",
+            label = "Evaluate & Save"
+          )
+        ),
+        
+        tags$div(
+          style = "
+          padding: 0px 0px 5px 0px;
+          ",
+          title = "
+          Refresh the platform
+          ",
+          actionButton(
+            inputId = "refresh",
+            label = "Refresh"
+          )
+        ),
+        
+        style = "
+        padding: 0px 5px 0px 5px;
+        margin-bottom: 10px;
+        "
+      )
+      )
+    ),
+      
+      # This tab panel contains the performance metrics table for the selected new candidates
+      
+      tabPanel(
+        title = strong(
+          "Selected New Candidates"
+        ),
+        id = "formTabSelections",
+        value = "formTabSelections",
+        br(),
+        
+        # This div contains the performance metric table
+        
+        div(
+          style = "
+          overflow-x: scroll;
+          ",
+          DT::dataTableOutput(
+            outputId = "selectionsTable"
+          )
+          
+        ),
+        
+        # Button for downloading the table
+        
+        downloadButton(
+          outputId = "downloadGroupSelectionData",
+          label = "Download this table"
+        )
+          ),
+      
+      # This tab panel contains the performance metrics table for each group, by stage
+      
+      tabPanel(
+        title = strong(
+          "Group Performance Measures by Stage"
+        ),
+        id = "formTabGroup",
+        value = "formTabGroup",
+        br(),
+        
+        # This div contains the performance metric table
+        
+        div(
+          style = "
+          overflow-x: scroll;
+          ",
+          DT::dataTableOutput(
+            outputId = "measuresTable"
+          )
+          
+        ),
+        
+        # Button for downloading the table
+        
+        downloadButton(
+          outputId = "downloadGroupMeasureData",
+          label = "Download this table"
+        )
+          ),
+      
+      # this tab panel contains the performance metric comparison chart for all group candidate sets by stage 
+      
+      tabPanel(
+        title = strong(
+          "Comparing to Other Groups"
+        ),
+        id = "formTabAllGroups",
+        value = "formTabAllGroups",
+        
+        # This column contains the comparison charts
+        
+        column(
+          width = 10,
+          wellPanel(
+            
+            # This div contains the comparison chart
+            div(
+              style = "
+              overflow-x: scroll
+              ",
+              DT::dataTableOutput(
+                "allMeasuresTable"
+              )
+            ),
+            
+            bootstrapPage(
+              
+              # This div contains the button for uploading the table to include recent submissions from all groups
+              
+              div(
+                style = "
+                display: inline-block
+                ",
+                title = "
+                Update table to include recent inputs from other groups
+                ",
+                actionButton(
+                  inputId = "updateTable",
+                  label = "Update the table"
+                )
+              ),
+              
+              # this div contains the button to download the comparison table as a .csv file
+              
+              div(
+                style = "
+                display: inline-block;
+                ",
+                title = "
+                Download this table as a .csv file
+                ",
+                downloadButton(
+                  outputId = "downloadAllGroupMeasureData",
+                  label = "Download the table"
+                )
+              )
+      )
+        ),
+      
+      wellPanel(
+        plotOutput(
+          outputId = "groupComparisonPlot",
+          height = 600
+        ),
+        tags$div(
+          title = "
+          Download the plot as a .png file
+          ",
+          downloadButton(
+            outputId = "downloadPlot",
+            label = "Download the plot"
+          )
+        )
+          )
+          ),
+      
+      # This column contains the selection controls for group candidate set comparison
+      
+      column(
+        width = 2,
+        style = "
+        padding: 0px 5px 0px 5px;
+        ",
+        wellPanel(
+          
+          # This div instructs users to select groups and stages for comparison
+          
+          div(
+            p(
+              style = "
+              padding: 0px 0px 0px 5px;
+              margin-bottom: 0px;
+              ",
+              strong(
+                "
+                Select group(s) & stage(s) for comparison
+                "
+              )
+              )
+              ),
+          
+          # This div contains a collapsing tree of checkboxes that allow for selection of specific groups and stages
+          
+          tags$div(
+            style = "
+            font-size: 10pt;
+            padding: 0px;
+            margin-bottom: 0px;
+            margin-top: 0px;
+            ",
+            class = ".jstree-node",
+            shinyTree(
+              outputId = "groupstagePlot",
+              checkbox = TRUE,
+              theme = "proton"
+            )
+          ),
+          
+          style = "
+          padding: 0px 0px 20px 0px;
+          margin-bottom: 0px;
+          height: 800px;
+          overflow-y: scroll;
+          "
+            ),
+        
+        # This panel contains the button that updates the list of groups & stages displayed to include those checked in the Tree structure
+        
+        wellPanel(
+          tags$div(
+            style = "
+            padding: 5px 0px 5px 0px;
+            ",
+            title = "
+            Update list of groups & stages
+            ",
+            actionButton(
+              inputId = "updatePlot",
+              label = "Update list"
+            )
+          ),
+          
+          style = "
+          padding: 0px 0px 0px 5px;
+          margin-bottom: 20px
+          "
+      ),
+      
+      # This pannel contains the x & y variable selection inputs for variables to display in the comparison chart
+      
+      wellPanel(
+        
+        selectInput(
+          inputId = "xVarPlot",
+          label = "X-axis variable",
+          choices = xAxis_vars
+        ),
+        
+        selectInput(
+          inputId = "yVarPlot",
+          label = "Y-axis variable",
+          choices = yAxis_vars
+        ),
+        
+        # This is a note containing information for users
+        
+        tags$small(
+          paste0(
+            "Note: A bar chart will be created to ",
+            "compare one performance measure between ",
+            "selected groups when GROUP_STAGE is ",
+            "selected as X-axis variable. Otherwise, ",
+            "a scatter plot will be generated to compare ",
+            "two performance measures between groups."
+          )
+        ),
+        
+        style = "
+        padding: 0px 5px 0px 5px;
+        "
+        
+      )
+          )
+        ),
+      
+      # this tab panel contains the leaflet widget that allows for comparisons between different candidate sets
+      
+      tabPanel(
+        title = strong(
+          "Spatial Comparison"
+        ),
+        id = "formTabAllGroupSelections",
+        value = "formTabAllGroupSelections",
+        
+        # This column contains the leaflet widget
+        
+        column(
+          width = 10,
+          leafletOutput(
+            "mapCompare",
+            height = 900
+          )
+        ),
+        
+        # This column contains the layer controls for the leaflet map
+        
+        column(
+          width = 2,
+          style = "
+          padding: 0px 5px 0px 5px
+          ",
+          wellPanel(
+            checkboxInput(
+              inputId = "CNGsCompare",
+              label = "
+              Existing CNG Stations (green circle)
+              "
+            ),
+            checkboxInput(
+              inputId = "CandidatesCompare",
+              label = "
+              Candidate sites (red circle)
+              "
+            ),
+            checkboxInput(
+              inputId = "AADT_NHS1_Compare",
+              label = "
+              AADT - Interstate
+              "
+            ),
+            checkboxInput(
+              inputId = "AADT_NHS3_Compare",
+              label = "
+              AADT - Non-Interstate Strategic Highway Network
+              "
+            ),
+            checkboxInput(
+              inputId = "AADT_NHS7_Compare",
+              label = "
+              AADT - Other National Highway System
+              "
+            ),
+            checkboxInput(
+              inputId = "AADT_NHS0_Compare",
+              label = "
+              AADT - Not on National Highway System
+              "
+            ),
+            checkboxInput(
+              inputId = "ZIP_Fleet_Compare",
+              label = "
+              Fleet Data by Zip Code
+              "
+            ),
+            checkboxInput(
+              inputId = "Pipelines_Compare",
+              label = "
+              Natural Gas Pipelines
+              "
+            ),
+            checkboxInput(
+              inputId = "Centroids_Compare",
+              label = "
+              Metro O-D Centroids
+              "
+            ),
+            style = "
+            padding: 0px 5px 0px 5px;
+            margin-bottom: 10px;
+            "
+            ),
+          
+          # Panel containing controls for group selection
+          
+          wellPanel(
+            
+            # this div contains the title
+            
+            div(
+              p(
+                style = "
+                padding: 0px;
+                margin-bottom: 0px,
+                ",
+                strong(
+                  "Select group(s) & stage(s)"
+                )
+              )
+            ),
+          
+          # This div contains a collapsing tree of groups and stages for spatial comparison
+          
+            tags$div(
+              style = "
+              font-size: 10pt;
+              padding: 0px;
+              margin-bottom: 0px;
+              margin-top: 0px;
+              ",
+              class = ".jstree-node",
+              shinyTree(
+                outputId = "groupStageSpatial",
+                checkbox = TRUE,
+                theme = "proton"
+              )
+            ),
+          
+          style = "
+          padding: 0px 0px 20px 0px;
+          margin-bottom: 0px;
+          height: 800px;
+          overflow-y: scroll;
+          "
+        ),
+          
+          # This div contains a button that updates the list of groups / stages to include recently input ones
+          
+          wellPanel(
+            tags$div(
+              style = "
+              padding: 5px 0px 15px 0px;
+              ",
+              title = "
+              Update list of groups & stages
+              ",
+              actionButton(
+                inputId = "updateSpatial",
+                label = "Update list"
+              )
+            ),
+            
+            bootstrapPage(
+              
+              # This div contains a button for visualizing selected groups & stages
+              
+              div(
+                style = "
+                display: inline-block;
+                padding: 0px 5px 15px 0px
+                ",
+                title = "
+                Visualize selected groups / stages
+                ",
+                actionButton(
+                  "visSpatial",
+                  "Visualize Points"
+                )
+              ),
+              
+              div(
+                style = "
+                display: inline-block;
+                padding: 0px 5px 15px 0px
+                ",
+                title = "
+                Remove selected points on map
+                ",
+                actionButton(
+                  "hideSelectedGroups_sp",
+                  "Hide Points"
+                )
+              ),
+              
+              div(
+                style = "
+                display: inline-block;
+                padding: 0px 5px 15px 0px
+                ",
+                title = "
+                Download selected data as .csv file
+                ",
+                downloadButton(
+                  "downloadSelectedData_sp",
+                  "Download selected data"
+                )
+              )
+            ),
+            
+            style = "
+            padding: 0px 5px 0px 5px;
+            margin-bottom: 10px;
+            "
+            )
+          )
+          ),
+      
+      # This tab panel contains the .pdf that contains the collablocation information
+      
+      tabPanel(
+        title = strong(
+          "About"
+        ),
+        id = "about",
+        br(),
+        
+        tags$iframe(
+          style = "
+                height: 900px;
+                width: 100%;
+              ",
+          src = "about.pdf"
+        )
+      ),
+      
+      tabPanel(
+        title = strong(
+          "Help & Data"
+        ),
+        id = "help",
+        value = "help",
+        br(),
+        
+        tags$iframe(
+          style = "
+                height: 900px;
+                width: 100%;
+              ",
+          src = "help.pdf"
+        )
+      )
+              )
+            )
+              )
+
+
+
+sidebar <- dashboardSidebar(
+  disable = TRUE
+)
+
+ui <- dashboardPage(
+  title = "Collablocation: Geodesign Platform",
+  header = header,
+  sidebar = sidebar,
+  body = body
+)
+
+server <- function(
+  input,
+  output,
+  session
+){
+  
+  ########################################
+  # Main tab
+  
+  # limit group names to <= 20 characters
+  
+  observe({
+    if (
+      nchar(paste0("",input$group)) > 20
+    ){
+      alert(
+        "Please limit group names to 20 characters max"
+      )
+    }
+  })
+  
+  # create a leaflet map to be rendered in the Main tab
+  
+  output$map <- renderLeaflet({
+    leaflet() %>%
+      
+      # set initial viewpoint
+      
+      setView(
+        lng = -72.674167,
+        lat = 41.7625,
+        zoom = 13
+      ) %>%
+      
+      # add Scale bar
+      
+      addScaleBar(
+        position = "bottomright",
+        options = scaleBarOptions(
+          maxWidth = 100,
+          metric = FALSE,
+          imperial = TRUE,
+          updateWhenIdle = TRUE
+        )
+      ) %>%
+      
+      # add basemap
+      
+      addTiles(
+        group = "OpenStreetMap"
+      ) %>%
+      
+      # add theme tiles
+      
+      addProviderTiles(
+        "Stamen.Toner",
+        group = "High Contrast"
+      ) %>%
+      addProviderTiles(
+        "CartoDB.DarkMatter",
+        group = "Dark Theme"
+      ) %>%
+      addProviderTiles(
+        "Esri.WorldImagery",
+        group = "Satellite View"
+      ) %>%
+      
+      # add layer control
+      
+      addLayersControl(
+        baseGroups = c(
+          "OpenStreetMap",
+          "High Contrast",
+          "Dark Theme",
+          "Satellite View"
+        ),
+        
+        options = layersControlOptions(
+          collapsed = TRUE,
+          autoZIndex = TRUE
+        )
+      )
+  })
+  
+  # Add markers for point features from data frames here
+  
+  
+  # Add spatial data layers to map
+  leafletProxy(
+    mapId = "map"
+  ) %>%
+    
+    # Add AADT
+    
+    addPolylines(
+      data = ct_aadtInterstate_4326_sf,
+      group = "ct_aadt_1",
+      color = "cyan",
+      weight = .0001 * ct_aadtInterstate_4326_sf$AADT_AADT_
+    ) %>%
+    
+    addPolylines(
+      data = ct_aadtOtherFreeway_4326_sf,
+      group = "ct_aadt_2",
+      color = "cyan",
+      weight = .0001 * ct_aadtOtherFreeway_4326_sf$AADT_AADT_
+    ) %>%
+    
+    addPolylines(
+      data = ct_aadtMajorArterial_4326_sf,
+      group = "ct_aadt_3",
+      color = "cyan",
+      weight = .0001 * ct_aadtMajorArterial_4326_sf$AADT_AADT_
+    ) %>%
+    
+    addPolylines(
+      data = ct_aadtMinorArterial_4326_sf,
+      group = "ct_aadt_4",
+      color = "cyan",
+      weight = .0001 * ct_aadtMinorArterial_4326_sf$AADT_AADT_
+    ) %>%
+    
+    addPolylines(
+      data = ct_aadtMajorCollector_4326_sf,
+      group = "ct_aadt_5",
+      color = "cyan",
+      weight = .0001 * ct_aadtMajorCollector_4326_sf$AADT_AADT_
+    ) %>%
+    
+    addPolylines(
+      data = ct_aadtMinorCollector_4326_sf,
+      group = "ct_aadt_6",
+      color = "cyan",
+      weight = .0001 * ct_aadtMinorCollector_4326_sf$AADT_AADT_
+    ) %>%
+    
+    addPolylines(
+      data = ct_aadtLocal_4326_sf,
+      group = "ct_aadt_7",
+      color = "cyan",
+      weight = .0001 * ct_aadtLocal_4326_sf$AADT_AADT_
+    ) %>%
+    
+    addPolylines(
+      data = ct_aadtNull_4326_sf,
+      group = "ct_aadt_N",
+      color = "cyan",
+      weight = .0001 * ct_aadtNull_4326_sf$AADT_VALUE
+    ) %>%
+    
+    # Add candidate gas stations
+    
+    addCircles(
+      data = ct_stationsGas_4326_sf,
+      group = "ct_candidateSites",
+      color = "#444444",
+      opacity = 10,
+      radius = 100,
+      fill = TRUE,
+      fillColor = "#444444",
+      fillOpacity = 10,
+      layerId = ct_stationsGas_4326_sf$layerId
+    ) %>%
+    
+    addCircles(
+      data = ct_05dflrm_4326_sf,
+      group = "ct_05dflrm",
+      color = "#990000",
+      weight = 1,
+      opacity = 10,
+      radius = 300,
+      fill = TRUE,
+      fillColor = "#990000",
+      fillOpacity = 10
+    ) %>%
+    
+    addCircles(
+      data = ct_10dflrm_4326_sf,
+      group = "ct_10dflrm",
+      color = "#222222",
+      weight = 3,
+      opacity = 10,
+      radius = 300,
+      fill = TRUE,
+      fillColor = "#990000",
+      fillOpacity = 10
+    ) %>%
+    
+    addCircles(
+      data = ct_05ftback_4326_sf,
+      group = "ct_05ftBack",
+      color = "#009900",
+      weight = 1,
+      opacity = 10,
+      radius = 300,
+      fill = TRUE,
+      fillColor = "#009900",
+      fillOpacity = 10
+    ) %>%
+    
+    addCircles(
+      data = ct_10ftback_4326_sf,
+      group = "ct_10ftBack",
+      color = "#222222",
+      weight = 3,
+      opacity = 10,
+      radius = 300,
+      fill = TRUE,
+      fillColor = "#009900",
+      fillOpacity = 10
+    ) %>%
+    
+    addCircles(
+      data = ct_05pMed_4326_sf,
+      group = "ct_05pMed",
+      color = "#000099",
+      weight = 1,
+      opacity = 10,
+      radius = 300,
+      fill = TRUE,
+      fillColor = "#000099",
+      fillOpacity = 10
+    ) %>%
+    
+    addCircles(
+      data = ct_10pMed_4326_sf,
+      group = "ct_10pMed",
+      color = "#222222",
+      weight = 3,
+      opacity = 10,
+      radius = 300,
+      fill = TRUE,
+      fillColor = "#000099",
+      fillOpacity = 10
+    ) %>%
+    
+    addMarkers(
+      data = ct_stationsH2_4326_sf,
+      group = "ct_stationsH2"
+    ) %>%
+    
+    addPolylines(
+      data = ct_natGasPipes_4326_sf,
+      group = "ct_natGasPipes",
+      color = "purple",
+      weight = .5
+    )
+    
+  
+  
+  
+  ########################################
+  # Function for showing / hiding layers in a Shiny Leaflet widget using Shiny input controls outside of the widget
+  # As mentioned above, this function might be improved performance-wise using the 
+  # This function takes a spatial dataframe, a Shiny input object, and the group name assigned to the spatial dataframe.
+  # If input = TRUE, show layer.  If input = FALSE, hide layer.
+  
+  
+  layerToggle <- function(
+    button,
+    group
+  ){
+    ifelse(
+      button,
+      leafletProxy(
+        mapId = "map"
+      ) %>%
+        showGroup(
+          group = group
+        ),
+      leafletProxy(
+        mapId = "map"
+      ) %>%
+        hideGroup(
+          group = group
+        )
+    )
+  }
+  
+  # Add layerToggle calls for each feature set here
+  
+  observe(
+    layerToggle(
+      button = input$ct_stationsH2_button,
+      group = "ct_stationsH2"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_stationsGas_button,
+      group = "ct_candidateSites"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_aadt_1_button,
+      group = "ct_aadt_1"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_aadt_2_button,
+      group = "ct_aadt_2"
+    )
+  )
+  observe(
+    layerToggle(
+      button = input$ct_aadt_3_button,
+      group = "ct_aadt_3"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_aadt_4_button,
+      group = "ct_aadt_4"
+    )
+  )
+  observe(
+    layerToggle(
+      button = input$ct_aadt_5_button,
+      group = "ct_aadt_5"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_aadt_6_button,
+      group = "ct_aadt_6"
+    )
+  )
+  observe(
+    layerToggle(
+      button = input$ct_aadt_7_button,
+      group = "ct_aadt_7"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_05dflrm_button,
+      group = "ct_05dflrm"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_10dflrm_button,
+      group = "ct_10dflrm"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_05ftBack_button,
+      group = "ct_05ftBack"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_10ftBack_button,
+      group = "ct_10ftBack"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_05pMed_button,
+      group = "ct_05pMed"
+    )
+  )
+  
+  observe(
+    layerToggle(
+      button = input$ct_10pMed_button,
+      group = "ct_10pMed"
+    )
+  )
+  
+  # observe(
+  #   layerToggle(
+  #     button = input$ct_aadt_N_button,
+  #     group = "ct_aadt_N"
+  #   )
+  # )
+  
+  observe(
+    layerToggle(
+      button = input$ct_natGasPipes_button,
+      group = "ct_natGasPipes"
+    )
+  )
+  
+  
+  
+  ########################################
+  # New Candidate Selection
+  
+  # Create a reactive object in the server environment called 'add'
+  
+  # add <- reactiveValues()
+  # 
+  # WOW THIS WHOLE NEXT SECTION IS DEPRECATED
+  # 
+  # # Whenever the 'map_click' object in 'input' changes value, assign that value to 'coords'
+  # # if the values are valid--i.e. they exist--
+  # # assign lat & lng in 'map_click' to the 'add' object
+  # 
+  # observeEvent(
+  #   eventExpr = input$map_click,
+  #   handlerExpr =  {
+  #     
+  #     # assign to coords input$map_click
+  #     # This means that coords contains:
+  #     # lat
+  #     # lng
+  #     
+  #     coords <- input$map_click
+  #     
+  #     
+  #     # if input$add is null and input$coords is null
+  #     
+  #     if(
+  #       
+  #       (!is.null(input$add) && (!is.null(coords)))
+  #       
+  #     ){
+  #       
+  #       # if input$add is greater than or equal to 1
+  #       # which makes NO SENSE because input$add is
+  #       # a list. It's a reactive object.  What does it
+  #       # mean for it to be >= 1?
+  #       
+  #       if(
+  #         input$add >= 1
+  #       ) {
+  #         add[["lat"]] <- coords$lat
+  #         add[["lng"]] <- coords$lng
+  #       }
+  #       
+  #       else {
+  #         print(
+  #           "Please click 'Add' button to select candidates"
+  #         )
+  #       }
+  #     }
+  #   }
+  # )
+  
+  # Whenever values in 'add' change, create markers on map to 
+  # represent selected lat & lng values
+  # 
+  # observeEvent(
+  #   eventExpr =  add$lat,
+  #   handlerExpr = {
+  #     leafletProxy(
+  #       "map"
+  #     ) %>%
+  #       addMarkers(
+  #         lat = add$lat,
+  #         lng = add$lng,
+  #         layerId = paste0(
+  #           "New CNG station with latitude: ",
+  #           add$lat,
+  #           " & longitude: ",
+  #           add$lng
+  #         )
+  #       )
+  #   }
+  # )
+  
+  ########################################
+  # Add Selected Points to Map
+  
+  # Reactive objects are lists.  
+  # Reading an object from the list in an expression creates
+  # a dependency on the object.
+  # Altering the object reruns the dependent expressions.
+  
+  # make a reactive listt called 'selection'
+  
+  selection <- reactiveValues()
+  
+  # attach an empty dataframe called 'df' to the reactive list called 'selection'
+  
+  selection$df <- data.frame()
+  
+  # make a reactive list called 'measure'
+  
+  measure <- reactiveValues()
+  
+  # attach an empty dataframe called 'df' to the reactive list called 'measure'
+  
+  measure$df <- data.frame()
+  
+  
+  
+    observeEvent(
+
+        # Observe for inputs that are clicks on map shapes
+
+      eventExpr = input$map_shape_click,
+
+      # Then do:
+
+      handlerExpr = {
+
+        # Assign input$map_shape_click to 'records'
+        # This is a list of 'lat','lng', and 'id', which is layerId
+        # Because it is a geojson_click, it also includes featureId
+        # and properties
+        
+        clicked <- input$map_shape_click
+        
+        print(clicked$id)
+
+        ########################################
+        # We're going to add the selected
+        # candidate 'id', 'group', 'lat', & 'lng' to
+        # an accumulator 'records_v2' dataframe
+        # these dataframes will be uploaded to the
+        # mongodb database
+        ########################################
+
+        if(
+
+          # We need something here that says "If the input map_shape_click to records is a valid candidate site, do this:"
+
+          # We went with assigning a layerId at the addCircles stage that includes
+          # unique IDs for each feature that consist of "candidate" + a three-digit ID
+
+          grepl(
+            "candidate", 
+            clicked$id,
+            fixed = TRUE
+          )
+          
+        ) {
+          
+          if(
+             input$group != "" & !is.na(input$stage) & !is.na(input$iteration)
+          ) {
+
+            # assign transposed 'records' as data frame to 'records_v2'
+
+            selectedSites <- as.data.frame(t(clicked))
+
+  # keep only variables 'id', 'group', 'lat', and 'lng'
+
+            selectedSites <- selectedSites %>% select(id,group,lat,lng)
+
+  # flatten each variable in 'records_v2' & reassert data types
+
+            selectedSites$id <- as.factor(unlist(selectedSites$id))
+            selectedSites$group <- as.factor(unlist(selectedSites$group))
+            selectedSites$lat <- as.numeric(unlist(selectedSites$lat))
+            selectedSites$lng <- as.numeric(unlist(selectedSites$lng))
+
+  # reassert records_v2 as a data frame
+
+            selectedSites <- as.data.frame(selectedSites)
+
+            # Display the input map point now contained in 'clicked'
+            # in the Leaflet widget
+
+            # add a marker at the input point
+
+            leafletProxy(
+              "map"
+            ) %>%
+              addMarkers(
+                lng = clicked$lng,
+                lat = clicked$lat,
+                group = "ct_candidateSites",
+                # icon = ###
+                layerId = clicked$id,
+                label = paste0(
+                  "ID: ",
+                  clicked$id
+                ),
+                labelOptions = labelOptions(
+                  direction = "top",
+                  offset = c(
+                    0,
+                    -45
+                  )
+                )
+              ) %>%
+
+              # remove the shape (red or green circle) that
+              # existed there before
+
+              removeShape(
+                layerId = clicked$id
+              )
+
+            # if there are any entries in 'selection'
+
+            if(
+              nrow(selection$df) > 0
+            ) {
+
+              # add the rows in 'record_v2' to 'selection' dataframe
+
+              selection$df <- as.data.frame(
+                selection$df
+              )
+              selection$df <- rbind(
+                selection$df,
+                selectedSites
+              )
+
+              # create a mongodb entry with attribute
+              # 'GROUP_STAGE" consisting of
+              # 'Temp_#_Stage#.#'
+
+              selectedSites <- selectedSites %>% mutate(
+                GROUP_STAGE = sprintf(
+                  "Temp_%s_Stage%s.%s",
+                  input$group,
+                  input$stage,
+                  input$iteration
+                )
+              )
+
+              # connect to mongodb account and upload
+              # 'records_v2' to database there
+
+              db_selections_tempgroups <- mongo(
+                collection = "tempgroups_selections",
+                url = mongoURL
+              )
+              selectedSites$GROUP_STAGE <- as.factor(
+                selectedSites$GROUP_STAGE
+              )
+              db_selections_tempgroups$insert(
+                selectedSites
+              )
+            }
+
+            # if there are no entries in 'selection:
+
+            else {
+
+              # Copy'records_v2' to 'selection' dataframe
+
+              selection$df <- selectedSites
+              selection$df <<- as.data.frame(
+                selection$df
+              )
+
+              # create a mongodb entry with attribute
+              # 'GROUP_STAGE" consisting of
+              # 'Temp_#_Stage#.#'
+
+              selectedSites <- selectedSites %>% mutate(
+                GROUP_STAGE = sprintf(
+                  "Temp_%s_Stage%s.%s",
+                  input$group,
+                  input$stage,
+                  input$iteration
+                )
+              )
+
+              # Connect to mongo DB, make a mongo connection object
+
+              db_selections_tempgroups <- mongo(
+                collection = "tempgroups_selections",
+                url = mongoURL
+              )
+
+              # Factorize 'records_v2' group stages
+
+              selectedSites$GROUP_STAGE <- as.factor(
+                selectedSites$GROUP_STAGE
+              )
+
+              # add 'records_v2' to the mongo connection object
+
+              db_selections_tempgroups$insert(
+                selectedSites
+              )
+
+            }
+          }
+
+          # Request group, stage, iteration inputs if any are missing
+
+          else {
+            alert(
+              "Please enter group name, stage number, & iteration number"
+            )
+          }
+        }
+
+        # Request candidate sites for selection if any are missing
+
+        else {
+          alert(
+            "Please select candidate sites"
+          )
+        }
+      }
+    )
+  
+  ########################################
+  # Remove selected points from map
+  
+  # make a reactive object called 'remove'
+  
+  remove <- reactiveValues()
+  
+  # Observe for marker clicks on the map
+  
+  observeEvent(
+    eventExpr =  input$map_marker_click,
+    handlerExpr = {
+      
+      # If Group, stage, and iteration are filled, do this:
+      
+      if(
+         input$group != "" & !is.na(input$stage) & !is.na(input$iteration)
+      ) {
+        
+        
+        # add the map_marker that was clicked to records
+        # I'm not quite certain how map_marker_click specifically points to input$map_marker but it does I guess.
+        # lat, lng, id (which is layerId if any exist)
+        
+        clicked <- input$map_marker_click
+        
+        
+        
+        if(
+          
+          grepl(
+            "candidate",
+            clicked$id,
+            fixed = TRUE
+            
+          )
+        ){
+        
+        # create removalSites from transposed dataframe of clicked
+          
+        removalSites <- as.data.frame(t(clicked))
+        
+        # select only 'id','group','lat', & 'lng' from that
+        
+        removalSites <- removalSites %>% select(
+          id,
+          group,
+          lat,
+          lng
+        )
+        
+        # factorize id, group, lat, lng
+        
+        removalSites$id <- as.factor(unlist(removalSites$id))
+        removalSites$group <- as.factor(unlist(removalSites$group))
+        removalSites$lat <- as.numeric(unlist(removalSites$lat))
+        removalSites$lng <- as.numeric(unlist(removalSites$lng))
+        
+        # assert 'removalSites' into a data frame
+        
+        removalSites <- as.data.frame(removalSites)
+        
+        # remove records markers, add back circles in group "Truck Stops"
+        
+        leafletProxy(
+          "map"
+        ) %>%
+          removeMarker(
+            layerId = clicked$id
+          ) %>%
+          addCircles(
+            lng = clicked$lng,
+            lat = clicked$lat,
+            color = "red",
+            opacity = 8,
+            radius = 100,
+            fill = TRUE,
+            fillColor = "red",
+            fillOpacity = 8,
+            group = "ct_candidateSites",
+            layerId = clicked$id,
+            label = paste0(
+              "ID: ",
+              clicked$id
+            ),
+            labelOptions = labelOptions(
+              direction = "top",
+              offset = c(
+                0,
+                -45
+              )
+            )
+          )
+        
+        # reassert selection$df as dataframe
+        
+        selection$df <- as.data.frame(selection$df)
+        
+        # I have no idea why we do this immediately preceding the last step. My note from first iteration of this code was:
+        # allow addition of duplicate records for later identification / deletion
+        
+        selection$df <- rbind(selection$df,removalSites)
+        
+        removalSites <- removalSites %>% mutate(
+          GROUP_STAGE = paste(
+            "Temp_",
+            input$group,
+            "_Stage",
+            input$stage,
+            ".",
+            input$iteration,
+            sep = ""
+          )
+        )
+        
+        db_selections_tempgroups <- mongo(
+          collection = "tempgroups_selections",
+          url = mongoURL
+        )
+        
+        removalSites$GROUP_STAGE <- as.factor(removalSites$GROUP_STAGE)
+        
+        db_selections_tempgroups$insert(removalSites)
+        }
+      }
+      
+      else{
+        
+        alert(
+          "Please enter group name, stage number, and iteration number"
+        )
+        
+      }
+    }
+  )
+  
+  # Create a reactive selections object
+  
+  # selections appears to be a reactive object that automatically updates whenever selection does as a result of changes to 'selection'
+  # This really needs a different name
+  # TODO: make new name for 'selections' & update all instances
+  
+  selections <- reactive({
+    
+    # if any entries exist in selection$df:
+    
+    if(
+      nrow(
+        selection$df > 0
+      )
+    ) {
+      
+      # ascribe selections$df to sessionData
+      
+      sessionData <- selections$df
+      
+      # give sessionData column names 
+      # "ID", "GROUP", "LATITUDE", "LONGITUDE"
+      
+      colnames(sessionData) <- c(
+        "ID",
+        "GROUP",
+        "LATITUDE",
+        "LONGITUDE"
+      )
+      
+      # Flatten sessionData columns and reassert their datatypes
+      
+      sessionData$ID <- as.factor(unlist(sessionData$ID))
+      sessionData$GROUP <- as.factor(unlist(sessionData$GROUP))
+      sessionData$LATITUDE <- as.numeric(unlist(sessionData$LATITUDE))
+      sessionData$LONGITUDE <- as.numeric(unlist(sessionData$LONGITUDE))
+      
+      # reorganize so that entries are grouped by ID, then GROUP
+      
+      sessionData <- sessionData %>% group_by(
+        ID,
+        GROUP
+      ) %>% 
+        
+        # Then create columns that have statistics for each group
+        
+        summarise(
+          AVE_LATITUDE = mean(LATITUDE),
+          AVE_LONGITUDE = mean(LONGITUDE),
+          COUNT = n()
+        )
+      
+      # remove duplicates from sessionData 
+      # using the modulus of 'COUNT'
+      
+      sessionData <- sessionData %>% filter(
+        COUNT %% 2 == 1
+      )
+      
+      # Picking only id, group, avg lat,
+      # and avg lng as variables for sessionData
+      
+      sessionData <- sessionData %>% select(
+        ID,
+        GROUP,
+        AVE_LATITUDE,
+        AVE_LONGITUDE
+      )
+      
+      # renaming id as 'ID_2', and avg's as
+      # generic lat & lng labels
+      
+      colnames(sessionData) <- c(
+        "ID_2",
+        "GROUP",
+        "LATITUDE",
+        "LONGITUDE"
+      )
+      
+      # give 'selections' the value of 'sessionData'
+      
+      sessionData
+    } 
+    
+    # if no entries exist in selection$df:
+    
+    else {
+      
+      # create a sessionData dataframe
+      # with this structure:
+      
+      sessionData <- data.frame(
+        ID_2 = factor(),
+        GROUP = character(),
+        LATITUDE = numeric(),
+        LONGITUDE = numeric()
+      )
+      
+      # and give 'selections' the value of 'sessionData'
+      
+      sessionData
+      
+    }
+  })
+  
+  # make a reactive object called
+  # 'groupSelections' that is a string with 
+  # input$group's value
+  
+  groupSelections <- reactive({
+    return(
+      sprintf(
+        "%s_Selections",
+        input$group
+      )
+    )
+  })
+  
+  # make a reactive object called
+  # 'groupMeasures' that is a string with 
+  # input$group's value
+  
+  groupMeasures <- reactive({
+    return(
+      sprintf(
+        "%s_Measures",
+        input$group
+      )
+    )
+  })
+  
+  # create a reactive object called 'selections2'
+  
+  selections2 <- reactive({
+    
+    # merge the selections data with Truck_Stops
+    # We'll keep all of the rows in selections(),
+    # while we'll ditch any rows in Truck_Stops
+    # that don't have an equivalent in selections()
+    
+    # WHY IS selections() a function?
+    # Answer: calling a reactive expression
+    # provides the expression's value,
+    # no matter what the value is at that moment
+    
+    sessionData <- merge(
+      selections(),
+      ct_stationsGas_4326_sf, # OBVIOUSLY NOT TRUCK STOPS IN THIS ONE
+      all.x = TRUE
+    )
+    
+    # Since we just kept all.x, that means that this sessiondata table probably
+    # looks messy.
+    
+    sessionData <- sessionData %>% select(
+      ID_2,
+      NAME,
+      ADDRESS,
+      GROUP,
+      AADT,
+      LATITUDE,
+      LONGITUDE
+    )
+    
+    # give sessionData column names
+    
+    colnames(sessionData) <- c(
+      "ID",
+      "NAME",
+      "ADDRESS",
+      "GROUP",
+      "AADT",
+      "LATITUDE",
+      "LONGITUDE"
+    )
+    
+    # Add another sessionData column
+    
+    sessionData <- sessionData %>% mutate(
+      GROUP_STAGE = paste(
+        input$group,
+        "_Stage",
+        input$stage,
+        ".",
+        input$iteration,
+        sep = ""
+      )
+    )
+    
+    # return sessionData whenever selections2 is called
+    
+    sessionData
+  })
+  
+  # make a reactive object called 'measures'
+  
+  measures <- reactive({
+    
+    # call sessionData from selections2
+    # sessionData is a dataframe with columns:
+    # "ID",
+    # "NAME",
+    # "ADDRESS",
+    # "GROUP",
+    # "AADT",
+    # "LATITUDE",
+    # "LONGITUDE",
+    # "GROUP_STAGE"
+    
+    sessionData <- selections2()
+    
+    # group sessionData rows by GROUP_STAGE
+    # group_by changes the way that summarise() works,
+    # providing summary statistics for the individual groups
+    
+    sessionData <- sessionData %>% group_by(
+      
+      GROUP_STAGE
+      
+    ) %>% summarise(
+      
+      # provide summary statistics for each GROUP_STAGE category
+      
+      # count of stations
+      
+      Stations = n(),
+      
+      # total annual average daily traffic (AADT)
+      
+      TOTAL_AADT = sum(AADT),
+      
+      # rounded integer of mean AADT
+      
+      AVG_AADT = as.integer(
+        round(
+          mean(AADT),
+          digits = 0
+        )
+      )
+    )
+    
+    # give sessionData new column names
+    
+    colnames(sessionData) <- c(
+      "GROUP_STAGE",
+      "NUMBER_OF_STATIONS",
+      "TOTAL_AADT",
+      "AVERAGE_AADT"
+    )
+    
+    # return sessionData whenever measures() is called
+    
+    sessionData
+    
+  })
+  
+  ###### distance calculation #######
+
+  # make a from_point2 reactive object in the
+  
+  from_point2 <- reactiveValues()
+  
+  # give it a dataframe
+  
+  from_point2$df <- data.frame()
+  
+  # make a to_point2 reactive object
+  
+  to_point2 <- reactiveValues()
+  
+  # give it a dataframe
+  
+  to_point2$df <- data.frame()
+  
+  observeEvent(
+    # whenever the input$distCal button is pushed:
+    
+    eventExpr = input$distCal,
+    
+    handlerExpr = {
+      
+      # if both "to" and "from" inputs are populated when distcal button is clicked:
+      # TODO: deactivate calculate button until both "to" and "from" fields are filled
+      # TODO: include a check that both fields are valid ids
+      
+      if(
+        input$from != "" & input$to != ""
+      ) {
+        
+        # OHHH This is why Fangwu made the 
+        # global variables "from_point2" & "to_point2",
+        # he uses from_point and to_point in this observeEvent
+        # and needed to declare something in the global environment
+        # TODO: fix that!
+        
+        # flatten input$from, assert it as a factor, and make it the 
+        # sole entry in the data frame from_point
+        
+        from_point <- as.data.frame(as.factor(unlist(input$from)))
+        
+        # name the column "ID_2"
+        # why ID_2?
+        # probably will make sense soon
+        # though also probably entails a logical workaround
+        
+        colnames(from_point) <- c("ID_2")
+        
+        # Okay now the from_pointX naming schema is unforgivable
+        # merge from_point with locations, keep all rows.
+        # So this is why we're calling it ID_2
+        # to differentiate it from (presumably) the ID field
+        # Also, locations is a preloaded dataframe.  
+        # So I don't know what it includes
+        # Okay locations is a dataframe that consists of 2034 observations
+        # with 3 variables:
+        # ID_2
+        # LATITUDE
+        # LONGITUDE
+        # TODO: this is a kludge.
+        # fix it
+        
+        from_point1 <- merge(
+          from_point,
+          locations,
+          all.x = TRUE
+        )
+        
+        # Since we're performing the same operations here,
+        # TODO: learn to use the apply functions to
+        # streamline this section
+        
+        # flatten input$to, assert it as a factor, and make it the 
+        # sole entry in the data frame from_point
+        
+        
+        to_point <- as.data.frame(
+          as.factor(
+            unlist(
+              input$to
+            )
+          )
+        )
+        
+        # name the column "ID_2"
+        
+        colnames(to_point) <- c("ID_2")
+        
+        # Okay now the from_pointX naming schema is unforgivable
+        # merge to_point with locations, keep all rows.
+        # So this is why we're calling it ID_2
+        # to differentiate it from (presumably) the ID field
+        # Also, locations is a preloaded dataframe.  
+        # So I don't know what it includes
+        # Okay locations is a dataframe that consists of 2034 observations
+        # with 3 variables:
+        # ID_2
+        # LATITUDE
+        # LONGITUDE
+        # TODO: this is a kludge.
+        # fix it
+        
+        to_point1 <- merge(
+          to_point,
+          locations,
+          all.x = TRUE
+        )
+        
+        # construct a URL for distance routing between
+        # from_point1 and to_point1
+        # using the Google Maps API
+        
+        # This requires an active Google Maps API key
+        # TODO: set google maps API as a variable required by
+        # the program
+        
+        # TODO: Let's do this as a JSON moving forward
+        
+        # Caution: Requests using traffic information are billed at a higher rate. 
+        
+        googleDistanceAPI_url <- paste0(
+          'https://maps.googleapis.com/',
+          '/maps/api/distancematrix/xml?',
+          'key=',
+          googleMapsAPIKey,
+          '&origins=',
+          from_point1$LATITUDE,
+          ',',
+          from_point1$LONGITUDE,
+          '&destinations=',
+          to_point1$LATITUDE,
+          ',',
+          to_poin1$LONGITUDE,
+          '&mode=driving',
+          '&language=en',
+          # TODO: make units a global user-defined variable
+          '&units=imperial',
+          '&sensor=false',
+          '&traffic_model=best_guess',
+          '&departure_time=now'
+        )
+        
+        # parse the xml file returned by xml.url
+        
+        # xmlParse returns an object of class
+        # XMLInternalDocument and class
+        # "XMLAbstractDocument"
+        # It is a pointer to a C object
+        # Thus we cannot call its contents like an R
+        # object, for that we need to use
+        # xmlTreeParse(), which is slightly
+        # less efficient for our use case
+        # so we'll stick with xmlParse()
+        
+        
+        xmlfile <- xmlParse(
+          getURL(xml.url)
+        )
+        
+        # parse distance in meters
+        # we create an R object from the distance element,
+        # then call its child,
+        # then read it.
+        
+        # We could also do:
+        
+        # dist <- xpathSApply(
+        #   doc = xmlfile,
+        #   path = '//distance',
+        #   fun = xmlValue
+        # )
+        
+        dist <- xmlValue(
+          
+          # xmlChildren() returns an object of 
+          # classes:
+          # XMLInternalNodeList
+          # XMLNodeList
+          
+          # We're accessing the first node
+          
+          xmlChildren(
+            
+            # xpathApply() returns an object
+            # of class XMLNodeSet
+            
+            xpathApply(
+              xmlfile,
+              '//distance'
+            )
+          )[[1]]
+        )
+        
+        googleDistanceAPI_url <- glue(
+          'https://maps.googleapis.com/',
+          '/maps/api/distancematrix/json?',
+          'key={googleMapsAPIKey}',
+          '&origins=',
+          '{from_point1$LATITUDE},',
+          '{from_point1$LONGITUDE}',
+          '&destinations=',
+          '{to_point1$LATITUDE},',
+          '{to_poin1$LONGITUDE}',
+          '&mode=driving',
+          '&language=en',
+          # TODO: make units a global user-defined variable
+          '&units={seshSet_units}',
+          '&sensor=false',
+          '&traffic_model=best_guess',
+          '&departure_time=now'
+        )
+        
+        googleDistanceAPI_json <- fromJSON(
+          getURL(
+            googleDistanceAPI_txt
+          )
+        )
+        
+        # output distance results:
+        
+        ouput$distance_result <- renderText(
+          googleDistanceAPI_json$rows$elements[[1]]$distance$text
+        )
+        
+        # reset 'from' and 'to' input boxes to empty:
+        
+        updateTextInput(
+          session = session,
+          inputId = "from",
+          label = NULL,
+          value = ""
+        )
+        
+        updateTextInput(
+          session = session,
+          inputId = "to",
+          label = NULL,
+          value = ""
+        )
+        
+        
+        
+        
+        
+      }
+    }
+    
+    
+  )
+  
+  
+}
+
+shinyApp(ui,server)
