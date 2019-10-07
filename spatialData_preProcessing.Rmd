@@ -1,0 +1,1998 @@
+---
+title: "DataProcessingScratch"
+output: html_document
+---
+
+```{r miscellania}
+validInputPattern <- "^[a-zA-Z0-9_.-]+$"
+
+  xAxis_vars <- c(
+    `Group & Stage` = "groupStageIterInfo",
+    `number of stations` = "number.of.stations",
+    `total VMT served` = "total.VMT.served",
+    `avg. VMT` = "avg..VMT.served",
+    `pop. served` = "total.pop..served",
+    `avg. pop. served` = "avg..pop..served",
+    `total trips served` = "total.trips.served",
+    `avg. trips served` = "avg..trips.served"
+  )
+  
+  yAxis_vars <- c(
+    `number of stations` = "number.of.stations",
+    `total VMT served` = "total.VMT.served",
+    `avg. VMT` = "avg..VMT.served",
+    `pop. served` = "total.pop..served",
+    `avg. pop. served` = "avg..pop..served",
+    `total trips served` = "total.trips.served",
+    `avg. trips served` = "avg..trips.served"
+  )
+
+```
+
+## Libraries
+```{r libraries}
+
+library(sf)
+library(tidyverse)
+library(rgdal)
+library(glue)
+
+```
+
+
+## Load Data
+
+Load the data
+
+```{r load spatial Data}
+mi <- 1609.344 
+
+setwd("~/_nsfgrant/nightly_build")
+
+load("prod_data.RData")
+
+
+setwd("/home/oscar/Dropbox (ASU)/NSF AFV project/geodesign/CT data/forOscar")
+
+
+# hartford_arcs_mpo_utm18N_sf <- st_read(
+#   "Hartford_MPO_arcs.shp"
+# ) # %>% st_transform(
+#   #   crs = 4326
+#   # )
+
+hartford_demandNodes_mpo_utm18N_sf <- st_read(
+  "Hartford_MPO_demand_nodes.shp"
+) %>% select(
+  NodeID,
+  Population,
+  Flow
+) %>% st_transform(
+  crs = 4326
+)
+
+setwd("~/_nsfgrant/spatialData")
+
+ct_stationsGas_fromqGIS <- st_read("ct_stationsGas_wAddresses_4326.geojson")
+
+ct_stationsGas_32618_sf <- ct_stationsGas_fromqGIS %>% st_transform(
+  crs = 32618
+)
+
+hartford_arcsBuffer2mi <- hartford_arcs_mpo_utm18N_sf %>% st_buffer(
+  2 * mi
+)
+
+# The default for this operation is st_intersects()
+ct_stationsAllToConsider <- ct_stationsGas_32618_sf[hartford_arcsBuffer2mi,] %>% addCategoryUniqueIdLayerId(
+  "candidate"
+)
+
+# state borders
+
+# us_stateBorders_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/2011_US_Historic_State_Territory_Boundaries.shp"
+# ) %>% st_transform(
+#   us_stateBorders_4326_sf,
+#   crs = 4326
+# )
+# 
+# ct_stateBorders_4326_sf <- subset(
+#   us_stateBorders_4326_sf,
+#   ABBR_NAME == "CT"
+# )
+# 
+```
+
+# Layers
+```{r layers}
+# Stations ####
+
+# This will require an AADT field when we conduct that assessment
+
+# ct_candidates_4326_sf <- st_read(
+#  "/run/media/oscar/M1804/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/ct_stationsGas_4326.geojson"
+# )
+# 
+# ct_candidates_4326_sf <- ct_candidates_4326_sf %>% select(
+#   -description,
+#   -timestamp,
+#   -begin,
+#   -end,
+#   -altitudeMode,
+#   -tessellate,
+#   -extrude,
+#   -visibility,
+#   -drawOrder,
+#   -icon,
+#   -type,
+#   -layerId
+# )
+# 
+# # Gas stations, intersections, etc have type 'candidate'
+# 
+# ct_candidates_4326_sf <- addCategoryUniqueIdLayerId(
+#   featureSet_sp = ct_candidates_4326_sf,
+#   category = "candidate"
+# )
+# 
+# 
+# # upload candidate stations
+# 
+# ct_candidates_db <- mongo(
+#   collection = "ct_candidates_db",
+#   url = mongoURL
+# )
+# 
+# ct_candidates_db$insert(
+#   data = sf_geojson(ct_candidates_4326_sf,atomise = TRUE)
+# )
+# 
+# ct_candidates_db$update(
+#   query = "{}",
+#   update = '{
+#     "$unset":{
+#       "properties.category":1,
+#       "properties.layerId":1
+#     }
+#   }',
+#   multiple = TRUE
+# )
+# 
+# H2 stations
+
+ct_stationsH2_txt <- getURL(
+  url = "https://developer.nrel.gov/api/alt-fuel-stations/v1.csv?fuel_type=HY&api_key=HafPxe7WUkiiKAgWpBOWq8jgj5SvevcNGqw4WAgw&format=csv"
+  # url = "https://developer.nrel.gov/api/alt-fuel-stations/v1.csv?fuel_type=HY&state=CT&access=public&api_key=HafPxe7WUkiiKAgWpBOWq8jgj5SvevcNGqw4WAgw&format=csv"
+)
+
+ct_stationsH2_4326_csv <- read_delim(
+    file = ct_stationsH2_txt,
+    delim = ","
+  )
+
+ct_stationsH2_4326_sf <- st_as_sf(
+    ct_stationsH2_4326_csv,
+    coords = c("Longitude","Latitude")
+  ) %>% st_set_crs(
+    value = 4326
+  )
+
+# Existing FCV stations have type 'fcvStation'
+
+ct_stationsH2Public_4326_sf <- ct_stationsH2_4326_sf %>% filter(
+  `Access Code` == "public"
+) %>% addCategoryUniqueIdLayerId(
+  category = "fcvStation"
+) %>% select(
+  -`Fuel Type Code`,
+  -ZIP,
+  -Plus4,
+  -`CNG Dispenser Num`,
+  -`CNG Total Compression Capacity`,
+  -`CNG Fill Type Code`,
+  -`CNG PSI`,
+  -`CNG Vehicle Class`,
+  -`EV Pricing`,
+  -`LPG Primary`,
+  -`LPG Nozzle Types`,
+  -`BD Blends (French)`,
+  -`Groups With Access Code (French)`,
+  -`BD Blends`,
+  -`NG PSI`,
+  -`EV Level2 EVSE Num`,
+  -`EV Level1 EVSE Num`,
+  -`EV Connector Types`,
+  -`EV Other Info`,
+  -`EV Network Web`,
+  -`EV DC Fast Count`,
+  -`NG Fill Type Code`,
+  -Country,
+  -`E85 Blender Pump`,
+  -`Intersection Directions (French)`,
+  -`Station Phone`,
+  -`Updated At`,
+  -`Date Last Confirmed`,
+  -`EV Network`,
+  -`LNG On-Site Renewable Source`,
+  -`LNG Vehicle Class`,
+  -`EV Pricing (French)`,
+  -`CNG Storage Capacity`,
+  -`E85 Other Ethanol Blends`,
+  -`Access Days Time (French)`,#
+  -`NG Vehicle Class`,
+  -`Cards Accepted`,
+  -`Geocode Status`,
+  -`Hydrogen Status Link`,
+  -`CNG On-Site Renewable Source`,
+  -`EV On-Site Renewable Source`,
+  -`Federal Agency Name`,
+  -`Federal Agency ID`,
+  -`Federal Agency Code`,
+  -ID,
+  -`Open Date`,
+  -`Intersection Directions`,
+  -`Access Days Time`,
+  -`Groups With Access Code`,
+  -`Access Detail Code`
+)
+
+remove(
+  ct_stationsH2_txt,
+  ct_stationsH2_4326_csv,
+  ct_stationsH2_4326_sf
+)
+
+# Autolots ####
+ct_autoLots_4326_sf <- st_read(
+  "~/_nsfgrant/spatialData/autodealers/doc.kml"
+) %>% st_transform(
+  crs = 4326
+)
+
+# Natural Gas Lines  # -`Federal Agency Name`,
+  # -`Federal Agency ID`,
+  # -`Federal Agency Code`,
+
+# us_natGasPipes_4326_sf <- st_read(
+#   "D:/asu/_nsfgrant/colLabLocation_platform/colLabLocation_ct_h2_2019/spatialData/NaturalGas_Pipelines_US_201804.shp"
+# ) %>% st_transform(
+#   us_natGasPipes_4326_sf,
+#   crs = 4326
+# )
+# # Get intersection of pipelines with CT Borders
+# 
+# ct_natGasPipes_4326_sf <- st_intersection(
+#   us_natGasPipes_4326_sf,
+#   ct_stateBorders_4326_sf
+# )
+# 
+# # Make it one geometry for ease of rendering:
+# 
+# ct_natGasPipes_4326_sf <- st_union(
+#   ct_natGasPipes_4326_sf
+# )
+
+
+
+
+```
+
+# Model results
+
+```{r modelResults}
+
+# It makes the most sense to me that we include all of the optimized results in one dataframe
+# and subset the results
+ct_optimalModelResults_4326_sf <- data.frame()
+# DFLRM Results
+
+ct_05frlm_4326_sf <- st_read(
+  "~/_nsfgrant/spatialData/frlm/StatedPreferenceRuns/GeodesignFRLM5stations.shp"
+) %>% st_transform(
+  crs = 4326
+) %>% mutate(
+  model = 'frlm05'
+) %>% select(
+  model
+)
+
+ct_10frlm_4326_sf <- st_read(
+  "~/_nsfgrant/spatialData/frlm/StatedPreferenceRuns/GeodesignFRLM10stations.shp"
+) %>% st_transform(
+  crs = 4326
+) %>% mutate(
+  model = 'frlm10'
+) %>% select(
+  model
+)
+
+ct_05ftback_4326_sf <- st_read(
+"~/_nsfgrant/spatialData/pMed-frlm/P-median-FRLM/VMT-Top5.shp"
+) %>% st_transform(
+  crs = 4326
+) %>% mutate(
+  model = 'ftb05'
+) %>% select(
+  model
+)
+
+ct_10ftback_4326_sf <- st_read(
+"~/_nsfgrant/spatialData/pMed-frlm/P-median-FRLM/VMT-Top10.shp"
+) %>% st_transform(
+  crs = 4326
+) %>% mutate(
+  model = 'ftb10'
+) %>% select(
+  model
+)
+
+ct_05pMed_4326_sf <- st_read(
+"~/_nsfgrant/spatialData/pMed/p-median_geodesign/pmedian_2existing_Top5.shp"
+) %>% st_transform(
+  crs = 4326
+) %>% mutate(
+  model = 'pMed05'
+) %>% select(
+  model
+)
+
+ct_10pMed_4326_sf <- st_read(
+"~/_nsfgrant/spatialData/pMed/p-median_geodesign/pmedian_2existing_Top10.shp"
+) %>% st_transform(
+  crs = 4326
+) %>% mutate(
+  model = 'pMed10'
+) %>% select(
+  model
+)
+
+ct_optimalModelResults_4326_sf <- rbind(
+  ct_05frlm_4326_sf,
+  ct_10frlm_4326_sf,
+  ct_05ftback_4326_sf,
+  ct_10ftback_4326_sf,
+  ct_05pMed_4326_sf,
+  ct_10pMed_4326_sf
+) %>% addCategoryUniqueIdLayerId(
+  category = "optiModel"
+)
+remove(
+  ct_05dfrlm_4326_sf,
+  ct_05frlm_4326_sf,
+  ct_05ftback_4326_sf,
+  ct_05pMed_4326_sf,
+  ct_10dflrm_4326_sf,
+  ct_10flrm_4326_sf,
+  ct_10frlm_4326_sf,
+  ct_10ftback_4326_sf,
+  ct_10pMed_4326_sf
+)
+```
+
+## Functions
+
+```{r functions}
+
+# We want every point to have a layerId that consists of a category appended with a fixed-digit unique ID number.
+# for example, the first feature in a set of 589 candidate sites would have layerId "candidate001", and the last would
+# have layerId "candidate589"
+
+# This function takes a dataframe and a character string, assigns that character
+# string to all rows in a column named "category", then generates unique IDs for
+# each row based on its row number in a column named "uniqueId".  These unique 
+# IDs are character strings that include leading zeros so that each ID has the 
+# same number of characters. This function then concatenates the category and 
+# uniqueId fields in a field called "layerId" that works with Leaflet to enable 
+# selective styles and interactivity during site selection.
+
+addCategoryUniqueIdLayerId <- function(
+  featureSet_sp,
+  category
+) {
+  
+  featureTotal <- nrow(featureSet_sp)
+  
+  rowMaxDigits <- nchar(
+    featureTotal
+  ) 
+  
+  idSequence <- seq.int(featureTotal)
+  
+  paddedId <- str_pad(
+    string = as.character(idSequence),
+    width = rowMaxDigits,
+    pad = "0"
+  )
+  
+  layerId <- glue(
+    "{category}{paddedId}",
+    category = category,
+    paddedId = paddedId
+  )
+  
+  featureSet_sp %>% mutate(
+    category = category,
+    uniqueId = paddedId,
+    layerId = layerId
+  )
+}
+
+st_bufPointIntersectPolySumFlow <- function(
+  pointFeatures,
+  pF_bufferDist,
+  intersectPoly
+) {
+  
+  bufferedPoints <- pointFeatures %>% st_buffer(
+    pF_bufferDist
+  )
+  
+  return(
+    st_intersection(
+      bufferedPoints,
+      intersectPoly
+    ) %>% group_by(
+      uniqueId
+    ) %>% summarise(
+      totalArcFlow = sum(ArcFlows)
+    ) %>% data.frame(
+    ) %>% select(
+      uniqueId,
+      totalArcFlow
+    )
+  )
+}
+
+st_bufPointIntersectPolySumDemandNodes <- function(
+  pointFeatures,
+  pF_bufferDist,
+  intersectPoly
+) {
+  
+  bufferedPoints <- pointFeatures %>% st_buffer(
+    pF_bufferDist
+  )
+  
+  return(
+    st_intersection(
+      bufferedPoints,
+      intersectPoly
+    ) %>% group_by(
+      uniqueId
+    ) %>% summarise(
+      totalPop = sum(Population),
+      tripFlow = as.integer(sum(Flow)),
+    ) %>% data.frame(
+    ) %>% select(
+      uniqueId,
+      totalPop,
+      tripFlow
+    )
+  )
+}
+
+```
+
+## Arc Flow sums
+
+TODO: create thiessen polygons at each step
+TODO: openrouteservices
+  
+```{r arc flow sum}
+
+mi <- 1609.344 
+
+# # 1mi buffer ####
+# 
+# ct_stationsGas_01miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 1 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 1 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 2 mi buffer ####
+# 
+# ct_stationsGas_02miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 2 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 2 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 3 mi buffer ####
+# 
+# ct_stationsGas_03miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 3 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 3 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 4 mi buffer ####
+# 
+# ct_stationsGas_04miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 4 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 4 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 5 mi buffer ####
+# 
+# ct_stationsGas_05miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 5 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 5 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 6 mi buffer ####
+# 
+# ct_stationsGas_06miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 6 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 6 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 7 mi buffer ####
+# 
+# ct_stationsGas_07miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 7 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 7 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 8 mi buffer ####
+# 
+# ct_stationsGas_08miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 8 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 8 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 9 mi buffer ####
+# 
+# ct_stationsGas_09miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 9 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 9 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+# 
+# # 10 mi buffer ####
+# 
+# ct_stationsGas_10miBuf_4326_sf <- ct_stationsAllToConsider %>% left_join(
+#   st_bufPointIntersectPolySumFlow(
+#     pointFeatures =  .,
+#     pF_bufferDist = 10 * mi,
+#     intersectPoly = hartford_arcs_mpo_utm18N_sf
+#   )
+# ) %>% left_join(
+#   st_bufPointIntersectPolySumDemandNodes(
+#     pointFeatures =  .,
+#     pF_bufferDist = 10 * mi,
+#     intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+#   )
+# ) %>% st_transform(
+#   crs = 4326
+# ) %>% replace_na(
+#   list(
+#     totalPop = 0,
+#     tripFlow = 0
+#   )
+# )
+
+# Doing the same, but for the existing hydrogen stations
+
+# 1mi buffer ####
+
+# For the H2 stations:
+
+ct_stationsH2Public_4326_sf_01Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 1*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 1*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+# 2 mi buffer ####
+
+ct_stationsH2Public_4326_sf_02Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 2*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 2*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+
+# 3 mi buffer ####
+ct_stationsH2Public_4326_sf_03Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 3*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 3*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+# 4 mi buffer ####
+
+ct_stationsH2Public_4326_sf_04Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 4*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 4*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+# 5 mi buffer ####
+
+ct_stationsH2Public_4326_sf_05Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 5*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 5*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+# 6 mi buffer ####
+
+ct_stationsH2Public_4326_sf_06Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 6*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 6*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+# 7 mi buffer ####
+
+ct_stationsH2Public_4326_sf_07Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 7*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 7*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+# 8 mi buffer ####
+
+ct_stationsH2Public_4326_sf_08Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 8*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 8*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+# 9 mi buffer ####
+
+ct_stationsH2Public_4326_sf_09Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 9*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 9*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+# 10 mi buffer ####
+
+ct_stationsH2Public_4326_sf_10Buf <- ct_stationsH2Public_4326_sf %>%
+  st_transform(
+    32618
+  ) %>%
+  left_join(
+  st_bufPointIntersectPolySumFlow(
+    pointFeatures = .,
+    pF_bufferDist = 10*mi,
+    intersectPoly = hartford_arcs_mpo_utm18N_sf
+  )
+) %>% left_join(
+  st_bufPointIntersectPolySumDemandNodes(
+    pointFeatures = .,
+    pF_bufferDist = 10*mi,
+    intersectPoly = hartford_demandNodes_mpo_utm18N_sf
+  )
+) %>% st_transform(
+  crs = 4326
+) %>% replace_na(
+  list(
+    totalArcFlow = 0,
+    totalPop = 0,
+    tripFlow = 0
+  )
+)
+
+remove(
+  hartford_arcs_mpo_utm18N_sf,
+  hartford_arcsBuffer2mi,
+  hartford_demandNodes_mpo_utm18N_sf
+)
+
+```
+## Put it in one comprehensive dataframe
+
+```{r finalTally}
+# H2 stations
+ct_stationsH2Public_4326_sf <- ct_stationsH2Public_4326_sf %>% mutate(
+  totFlow01mi = ct_stationsH2Public_4326_sf_01Buf$totalArcFlow,
+  totPop01mi = ct_stationsH2Public_4326_sf_01Buf$totalPop,
+  totTrip01mi = ct_stationsH2Public_4326_sf_01Buf$tripFlow,
+  totFlow02mi = ct_stationsH2Public_4326_sf_02Buf$totalArcFlow,
+  totPop02mi = ct_stationsH2Public_4326_sf_02Buf$totalPop,
+  totTrip02mi = ct_stationsH2Public_4326_sf_02Buf$tripFlow,
+  totFlow03mi = ct_stationsH2Public_4326_sf_03Buf$totalArcFlow,
+  totPop03mi = ct_stationsH2Public_4326_sf_03Buf$totalPop,
+  totTrip03mi = ct_stationsH2Public_4326_sf_03Buf$tripFlow,
+  totFlow04mi = ct_stationsH2Public_4326_sf_04Buf$totalArcFlow,
+  totPop04mi = ct_stationsH2Public_4326_sf_04Buf$totalPop,
+  totTrip04mi = ct_stationsH2Public_4326_sf_04Buf$tripFlow,
+  totFlow05mi = ct_stationsH2Public_4326_sf_05Buf$totalArcFlow,
+  totPop05mi = ct_stationsH2Public_4326_sf_05Buf$totalPop,
+  totTrip05mi = ct_stationsH2Public_4326_sf_05Buf$tripFlow,
+  totFlow06mi = ct_stationsH2Public_4326_sf_06Buf$totalArcFlow,
+  totPop06mi = ct_stationsH2Public_4326_sf_06Buf$totalPop,
+  totTrip06mi = ct_stationsH2Public_4326_sf_06Buf$tripFlow,
+  totFlow07mi = ct_stationsH2Public_4326_sf_07Buf$totalArcFlow,
+  totPop07mi = ct_stationsH2Public_4326_sf_07Buf$totalPop,
+  totTrip07mi = ct_stationsH2Public_4326_sf_07Buf$tripFlow,
+  totFlow08mi = ct_stationsH2Public_4326_sf_08Buf$totalArcFlow,
+  totPop08mi = ct_stationsH2Public_4326_sf_08Buf$totalPop,
+  totTrip08mi = ct_stationsH2Public_4326_sf_08Buf$tripFlow,
+  totFlow09mi = ct_stationsH2Public_4326_sf_09Buf$totalArcFlow,
+  totPop09mi = ct_stationsH2Public_4326_sf_09Buf$totalPop,
+  totTrip09mi = ct_stationsH2Public_4326_sf_09Buf$tripFlow,
+  totFlow10mi = ct_stationsH2Public_4326_sf_10Buf$totalArcFlow,
+  totPop10mi = ct_stationsH2Public_4326_sf_10Buf$totalPop,
+  totTrip10mi = ct_stationsH2Public_4326_sf_10Buf$tripFlow
+)
+
+remove(
+  ct_stationsH2Public_4326_sf_01Buf,
+  ct_stationsH2Public_4326_sf_02Buf,
+  ct_stationsH2Public_4326_sf_03Buf,
+  ct_stationsH2Public_4326_sf_04Buf,
+  ct_stationsH2Public_4326_sf_05Buf,
+  ct_stationsH2Public_4326_sf_06Buf,
+  ct_stationsH2Public_4326_sf_07Buf,
+  ct_stationsH2Public_4326_sf_08Buf,
+  ct_stationsH2Public_4326_sf_09Buf,
+  ct_stationsH2Public_4326_sf_10Buf
+)
+
+ct_stationsGas_4326_sf <- ct_stationsAllToConsider %>% st_transform(
+  crs = 4326
+) %>% mutate(
+  totFlow01mi = ct_stationsGas_01miBuf_4326_sf$totalArcFlow,
+  totPop01mi = ct_stationsGas_01miBuf_4326_sf$totalPop,
+  totTrip01mi = ct_stationsGas_01miBuf_4326_sf$tripFlow,
+  totFlow02mi = ct_stationsGas_02miBuf_4326_sf$totalArcFlow,
+  totPop02mi = ct_stationsGas_02miBuf_4326_sf$totalPop,
+  totTrip02mi = ct_stationsGas_02miBuf_4326_sf$tripFlow,
+  totFlow03mi = ct_stationsGas_03miBuf_4326_sf$totalArcFlow,
+  totPop03mi = ct_stationsGas_03miBuf_4326_sf$totalPop,
+  totTrip03mi = ct_stationsGas_03miBuf_4326_sf$tripFlow,
+  totFlow04mi = ct_stationsGas_04miBuf_4326_sf$totalArcFlow,
+  totPop04mi = ct_stationsGas_04miBuf_4326_sf$totalPop,
+  totTrip04mi = ct_stationsGas_04miBuf_4326_sf$tripFlow,
+  totFlow05mi = ct_stationsGas_05miBuf_4326_sf$totalArcFlow,
+  totPop05mi = ct_stationsGas_05miBuf_4326_sf$totalPop,
+  totTrip05mi = ct_stationsGas_05miBuf_4326_sf$tripFlow,
+  totFlow06mi = ct_stationsGas_06miBuf_4326_sf$totalArcFlow,
+  totPop06mi = ct_stationsGas_06miBuf_4326_sf$totalPop,
+  totTrip06mi = ct_stationsGas_06miBuf_4326_sf$tripFlow,
+  totFlow07mi = ct_stationsGas_07miBuf_4326_sf$totalArcFlow,
+  totPop07mi = ct_stationsGas_07miBuf_4326_sf$totalPop,
+  totTrip07mi = ct_stationsGas_07miBuf_4326_sf$tripFlow,
+  totFlow08mi = ct_stationsGas_08miBuf_4326_sf$totalArcFlow,
+  totPop08mi = ct_stationsGas_08miBuf_4326_sf$totalPop,
+  totTrip08mi = ct_stationsGas_08miBuf_4326_sf$tripFlow,
+  totFlow09mi = ct_stationsGas_09miBuf_4326_sf$totalArcFlow,
+  totPop09mi = ct_stationsGas_09miBuf_4326_sf$totalPop,
+  totTrip09mi = ct_stationsGas_09miBuf_4326_sf$tripFlow,
+  totFlow10mi = ct_stationsGas_10miBuf_4326_sf$totalArcFlow,
+  totPop10mi = ct_stationsGas_10miBuf_4326_sf$totalPop,
+  totTrip10mi = ct_stationsGas_10miBuf_4326_sf$tripFlow,
+)
+
+ct_candidates_4326_sf <- ct_stationsGas_4326_sf
+
+remove(
+  ct_stationsGas_01miBuf_4326_sf,
+  ct_stationsGas_02miBuf_4326_sf,
+  ct_stationsGas_03miBuf_4326_sf,
+  ct_stationsGas_04miBuf_4326_sf,
+  ct_stationsGas_05miBuf_4326_sf,
+  ct_stationsGas_06miBuf_4326_sf,
+  ct_stationsGas_07miBuf_4326_sf,
+  ct_stationsGas_08miBuf_4326_sf,
+  ct_stationsGas_09miBuf_4326_sf,
+  ct_stationsGas_10miBuf_4326_sf,
+  ct_stationsGas_4326_sf
+)
+
+remove(
+  ct_stationsAllToConsider,
+  ct_stationsGas_32618_sf,
+  ct_stationsGas_fromqGIS
+)
+
+remove(
+  st_bufPointIntersectPolySumDemandNodes,
+  st_bufPointIntersectPolySumFlow
+)
+remove(
+  mi
+)
+
+remove(ct_aadt_4326_sf)
+
+```
+
+
+## Pop-up metrics
+
+We need this to be a label because shiny leaflet popups don't support mouseover events, and we don't want clicking to interfere with
+candidate selection
+
+I also couldn't figure out how to dynamically change the pop-up labels with slider input and it's probably less cpu intensive
+to do so beforehand so we may as well go this route.  Open to better ideas.
+
+This solution adapted from https://stackoverflow.com/questions/43144596/r-and-leaflet-how-to-arrange-label-text-across-multiple-lines
+  
+
+
+```{r Making labels}
+
+# H2 stations
+
+
+
+
+# gas station candidates
+stationLabels_01 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow01mi
+      tP <- ct_c$totPop01mi
+      tT <- ct_c$totTrip01mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_02 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow02mi
+      tP <- ct_c$totPop02mi
+      tT <- ct_c$totTrip02mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_03 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow03mi
+      tP <- ct_c$totPop03mi
+      tT <- ct_c$totTrip03mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_04 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow04mi
+      tP <- ct_c$totPop04mi
+      tT <- ct_c$totTrip04mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_05 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow05mi
+      tP <- ct_c$totPop05mi
+      tT <- ct_c$totTrip05mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_06 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow06mi
+      tP <- ct_c$totPop06mi
+      tT <- ct_c$totTrip06mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_07 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow07mi
+      tP <- ct_c$totPop07mi
+      tT <- ct_c$totTrip07mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_08 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow08mi
+      tP <- ct_c$totPop08mi
+      tT <- ct_c$totTrip08mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_09 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow09mi
+      tP <- ct_c$totPop09mi
+      tT <- ct_c$totTrip09mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+stationLabels_10 <- lapply(
+    seq(
+      nrow(
+        ct_candidates_4326_sf
+      )
+    ), 
+    function(i) {
+      ct_c <- ct_candidates_4326_sf[i,]
+      
+      name <- ct_c$Name
+      tF <- ct_c$totFlow10mi
+      tP <- ct_c$totPop10mi
+      tT <- ct_c$totTrip10mi
+      addr <- ct_c$streetAddress
+      muni <- ct_c$municipality
+      
+      glue(
+        '<p>
+          {name}
+          <br>
+          <br>
+          VMT served: {tF}
+          <br>
+          Pop served: {tP}
+          <br>
+          Trips served: {tT}
+          <br>
+          <br>
+          {addr}
+          <br>
+          {muni}
+        </p>'
+      )
+    }
+  )
+
+```
+
+## AADT separation
+
+```{r aadt}
+
+setwd("~/_nsfgrant/spatialData")
+
+ct_aadt_4326_sf <- st_read(
+  "ct_aadt_4326.geojson"
+) %>% select(
+  ROUTE_ID,
+  FC_FC_CODE,
+  AADT_AADT
+)
+
+ct_aadtInterstate_4326_sf <- subset(
+  ct_aadt_4326_sf,
+  FC_FC_CODE == 1
+) %>% group_by(
+  AADT_AADT
+) %>% summarise(
+)
+
+#  Other Freeway AADT
+
+ct_aadtOtherFreeway_4326_sf <- subset(
+  ct_aadt_4326_sf,
+  FC_FC_CODE == 2
+) %>% group_by(
+  AADT_AADT
+) %>% summarise(
+)
+
+#  Major Arterial AADT
+
+ct_aadtMajorArterial_4326_sf <- subset(
+  ct_aadt_4326_sf,
+  FC_FC_CODE == 3
+) %>% group_by(
+  AADT_AADT
+) %>% summarise(
+)
+
+#  Minor Arterial AADT
+
+ct_aadtMinorArterial_4326_sf <- subset(
+  ct_aadt_4326_sf,
+  FC_FC_CODE == 4
+) %>% group_by(
+  AADT_AADT
+) %>% summarise(
+)
+
+#  Major Collector AADT
+
+ct_aadtMajorCollector_4326_sf <- subset(
+  ct_aadt_4326_sf,
+  FC_FC_CODE == 5
+) %>% group_by(
+  AADT_AADT
+) %>% summarise(
+)
+
+
+
+```
+
+  ## map iconography & legend
+
+```{r map icons}
+
+  # Don't really have a better place to put this: 
+   
+aadt_line_color = "cyan"
+
+# we'll use these to point to the icon urls
+
+icon_candidate_png <- "www/candidate_icon.png"
+icon_selected_png <- "www/selected_icon.png"
+icon_h2exists_png <- "www/stationH2_existing_icon.png"
+icon_h2planned_png <- "www/stationH2_planned_icon.png"
+icon_frlm05_png <- "www/frlm05_icon.png"
+icon_frlm10_png <- "www/frlm10_icon.png"
+icon_pMed05_png <- "www/pMed05_icon.png"
+icon_pMed10_png <- "www/pMed10_icon.png"
+icon_ftb05_png <- "www/ftb05_icon.png"
+icon_ftb10_png <- "www/ftb10_icon.png"
+icon_prevSelecAdd_png <- "www/prevSelecAdd_icon.png"
+icon_autoLots_png <- "www/autoLots_icon.png"
+icon_wholesale_png <- "www/wholesale_icon.png"
+icon_transit_png <- "www/transit_icon.png"
+icon_warehouse_png <- "www/warehouse_icon.png"
+icon_coldStorage_png <- "www/coldStorage_icon.png"
+icon_truckPark_png <- "www/truckP_icon.png"
+icon_export_png <- "www/export_icon.png"
+icon_metalF_png <- "www/metalFinish_icon.png"
+icon_foodP_png <- "www/foodP_icon.png"
+
+library(leaflet)
+  
+markerIconList_byCategory <- iconList(
+    foodP = makeIcon(
+      iconUrl = icon_foodP_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    metalF = makeIcon(
+      iconUrl = icon_metalF_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    coldStorage = makeIcon(
+      iconUrl = icon_coldStorage_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    truckPark = makeIcon(
+      iconUrl = icon_truckPark_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    export = makeIcon(
+      iconUrl = icon_export_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    wholesale = makeIcon(
+      iconUrl = icon_wholesale_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    transit = makeIcon(
+      iconUrl = icon_transit_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    warehouse = makeIcon(
+      iconUrl = icon_warehouse_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    ),
+    candidate = makeIcon(
+      iconUrl = icon_candidate_png,
+      iconWidth = 17,
+      iconHeight = 20,
+      iconAnchorX = 8,
+      iconAnchorY = 10
+    ),
+    selected = makeIcon(
+      iconUrl = icon_selected_png,
+      iconWidth = 48,
+      iconHeight = 63,
+      iconAnchorX = 23,
+      iconAnchorY = 63
+    ),
+    stationH2_planned = makeIcon(
+      iconUrl = icon_h2planned_png,
+      iconWidth = 46,
+      iconHeight = 58,
+      iconAnchorX = 23,
+      iconAnchorY = 58
+    ),
+    stationH2_existing = makeIcon(
+      iconUrl = icon_h2exists_png,
+      iconWidth = 46,
+      iconHeight = 58,
+      iconAnchorX = 23,
+      iconAnchorY = 58
+    ),
+    frlm05 = makeIcon(
+      iconUrl = icon_frlm05_png,
+      iconWidth = 36,
+      iconHeight = 25,
+      iconAnchorX = 36,
+      iconAnchorY = 25
+    ),
+    frlm10 = makeIcon(
+      iconUrl = icon_frlm10_png,
+      iconWidth = 53,
+      iconHeight = 37,
+      iconAnchorX = 53,
+      iconAnchorY = 37
+    ),
+    pMed05 = makeIcon(
+      iconUrl = icon_pMed05_png,
+      iconWidth = 36,
+      iconHeight = 14,
+      iconAnchorX = 36,
+      iconAnchorY = 14
+    ),
+    pMed10 = makeIcon(
+      iconUrl = icon_pMed10_png,
+      iconWidth = 53,
+      iconHeight = 20,
+      iconAnchorX = 53,
+      iconAnchorY = 20
+    ),
+    ftb05 = makeIcon(
+      iconUrl = icon_ftb05_png,
+      iconWidth = 29,
+      iconHeight = 31,
+      iconAnchorX = 29,
+      iconAnchorY = 31
+    ),
+    ftb10 = makeIcon(
+      iconUrl = icon_ftb10_png,
+      iconWidth = 43,
+      iconHeight = 46,
+      iconAnchorX = 43,
+      iconAnchorY = 46
+    ),
+    prevSelecAdd = makeIcon(
+      iconUrl = icon_prevSelecAdd_png,
+      iconWidth = 39,
+      iconHeight = 27,
+      iconAnchorX = 1,
+      iconAnchorY = 27
+    ),
+    autoLots = makeIcon(
+      iconUrl = icon_autoLots_png,
+      iconWidth = 25,
+      iconHeight = 25,
+      iconAnchorX = 12,
+      iconAnchorY = 12
+    )
+    # prevSelec_q1 = makeIcon(
+    #   iconUrl = "www/prevSelecq1_icon.png",
+    #   iconWidth = 48,
+    #   iconHeight = 34,
+    #   iconAnchorX = 1,
+    #   iconAnchorY = 34
+    # ),
+    # prevSelec_q2 = makeIcon(
+    #   iconUrl = "www/prevSelecq2_icon.png",
+    #   iconWidth = 48,
+    #   iconHeight = 34,
+    #   iconAnchorX = 1,
+    #   iconAnchorY = 34
+    # ),
+    # prevSelec_q3 = makeIcon(
+    #   iconUrl = "www/prevSelecq3_icon.png",
+    #   iconWidth = 48,
+    #   iconHeight = 34,
+    #   iconAnchorX = 1,
+    #   iconAnchorY = 34
+    # ),
+    # prevSelec_q4 = makeIcon(
+    #   iconUrl = "www/prevSelecq4_icon.png",
+    #   iconWidth = 48,
+    #   iconHeight = 34,
+    #   iconAnchorX = 1,
+    #   iconAnchorY = 34
+    # ),
+  )
+
+# # we'll use these to generate html strings for each marker
+# 
+# legend_prevSelecAdd_html <- glue(
+#    "
+#     <img src = '{icon_prevSelecAdd_png}'>
+#       previously selected station
+#       <br>
+#   "
+# )
+# 
+# 
+# legend_candidate_html <- glue(
+#   "
+#     <img src = '{icon_candidate_png}'>
+#       gas station (candidate)
+#       <br>
+#   "
+# )
+#   
+# legend_selected_html <- glue(
+#   "
+#     <img src = '{icon_selected_png}'>
+#       selected station
+#       <br>
+#   "
+# )
+# 
+# legend_h2stations_html <- glue(
+#   "
+#     <img src = '{icon_h2exists_png}'>
+#       H<sub>2</sub> station
+#       <br>
+#     <img src = '{icon_h2planned_png}'>
+#       H<sub>2</sub> station (planned)
+#       <br>
+#   "
+# )
+# 
+# legend_frlm05_html <- glue(
+#   "
+#     <img src = '{icon_frlm05_png}'>
+#       Fuel - Refuel Location Model (5)
+#       <br>
+#   "
+# )
+# 
+# legend_frlm10_html <- glue(
+#   "
+#     <img src = '{icon_frlm10_png}'>
+#       Fuel - Refuel Location Model (10)
+#       <br>
+#   "
+# )
+# 
+# legend_pMed05_html <- glue(
+#   "
+#     <img src = '{icon_pMed05_png}'>
+#       p - Median Model (5)
+#       <br>
+#   "
+# )
+# 
+# legend_pMed10_html <- glue(
+#   "
+#     <img src = '{icon_pMed10_png}'>
+#       p-Median Model (10)
+#       <br>
+#   "
+# )
+# 
+# legend_ftb05_html <- glue(
+#   "
+#     <img src = '{icon_ftb05_png}'>
+#       Fuel - Travel Back Model (5)
+#       <br>
+#   "
+# )
+# 
+# legend_ftb10_html <- glue(
+#   "
+#     <img src = '{icon_ftb10_png}'>
+#       Fuel - Travel Back Model (10)
+#       <br>
+#   "
+# )
+# 
+# mainMap_legend_list <- list(
+#   # This order needs to correspond with the order in which boxes are checked in the observeEvent object
+#   legend_candidate_html,
+#   legend_selected_html,
+#   legend_h2stations_html,
+#   legend_frlm05_html,
+#   legend_frlm10_html,
+#   legend_pMed05_html,
+#   legend_pMed10_html,
+#   legend_ftb05_html,
+#   legend_ftb10_html
+# )
+# remove(
+#   legend_candidate_html,
+#   legend_selected_html,
+#   legend_h2stations_html,
+#   legend_frlm05_html,
+#   legend_frlm10_html,
+#   legend_pMed05_html,
+#   legend_pMed10_html,
+#   legend_ftb05_html,
+#   legend_ftb10_html
+# )
+
+  
+  
+  remove(
+  icon_candidate_png,
+  icon_selected_png,
+  icon_h2exists_png,
+  icon_h2planned_png,
+  icon_frlm05_png,
+  icon_frlm10_png,
+  icon_pMed05_png,
+  icon_pMed10_png,
+  icon_ftb05_png,
+  icon_ftb10_png,
+  icon_autoLots_png,
+  icon_prevSelecAdd_png,
+  icon_wholesale_png,
+  icon_transit_png,
+  icon_warehouse_png,
+  icon_coldStorage_png,
+  icon_truckPark_png,
+  icon_export_png,
+  icon_metalF_png ,
+  icon_foodP_png
+  
+)
+```
+
+# data from ct cc
+
+```{r ctcc layers}
+# setwd("~/_nsfgrant/spatialData/1_Energy_Data")
+setwd("~/_nsfgrant/spatialData/1_Energy_Data/GIS Layers (all of CT)")
+
+
+ct_oppZones_ctcc_4326_sf <- st_read(
+  dsn = "Opportunity Zones/Opp Zones CT only.shp"
+) %>% st_transform(
+  crs = 4326
+# ) %>% st_contains(    
+#   ct_stateBorders_4326_sf,
+#   sparse = FALSE
+)
+
+
+
+# head(ct_oppZones_ctcc_4326_sf)
+# 
+# ct_altFuelStations_ctcc_4326_sf <- st_read(
+#   dsn = "Alternative_Fueling_Stations/Alternative_Fueling_Stations.shp"
+# ) %>% st_transform(
+#   crs = 4326
+# )
+# head(ct_altFuelStations_ctcc_4326_sf)
+# remove(ct_altFuelStations_ctcc_4326_sf)
+
+ct_h2Users_coldStorage_4326_sf <- st_read(
+  dsn = "H2Users_DATA.gdb",
+  layer = "Cold_Storage_Northeast"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+ct_h2Users_exportOutput_4326_sf <- st_read(
+  dsn = "H2Users_DATA.gdb",
+  layer = "Export_Output"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+ct_h2Users_foodProcessing_4326_sf <- st_read(
+  dsn = "H2Users_DATA.gdb",
+  layer = "Food_Processing_Northeast"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+ct_h2Users_metalFinishing_4326_sf <- st_read(
+  dsn = "H2Users_DATA.gdb",
+  layer = "Metal_Finnishing_Northeast"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+ct_h2Users_transit_4326_sf <- st_read(
+  dsn = "H2Users_DATA.gdb",
+  layer = "Transit_Companies_Northeast"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+ct_h2Users_wholesale_4326_sf <- st_read(
+  dsn = "H2Users_DATA.gdb",
+  layer = "Wholesale_Clubs_Northeast"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+ct_truckStops <- st_read(
+  dsn = "truckstops/Truck_Stop_Parking/Truck_Stop_Parking CT only.shp"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+ct_warehouseLocations <- st_read(
+  dsn = "warehouses_Hartford.geojson"
+) %>% st_intersection(
+  ct_stateBorders_4326_sf
+)
+
+
+```
